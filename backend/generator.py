@@ -78,11 +78,22 @@ def calculate_suggested_nutrition(weight: float, height: float, goal: schemas.Tr
         carbs_g=carbs_g
     )
 
+def get_allowed_equipment(requested_equipment: str) -> List[str]:
+    if requested_equipment == "gym":
+        return ["gym", "dumbbells", "bodyweight", "bands"]
+    elif requested_equipment == "dumbbells":
+        return ["dumbbells", "bodyweight"]
+    elif requested_equipment == "bands":
+        return ["bands", "bodyweight"]
+    else:
+        return ["bodyweight"]
+
 def get_alternative_exercise(db: Session, request: schemas.ReplaceExerciseRequest) -> models.Exercise:
+    allowed_eq = get_allowed_equipment(request.equipment)
     # Szukamy ćwiczeń na tę samą partię, o tej samej kategorii i sprzęcie, ale o innym ID
     query = db.query(models.Exercise).filter(
         models.Exercise.muscle_group == request.muscle_group,
-        models.Exercise.equipment == request.equipment,
+        models.Exercise.equipment.in_(allowed_eq),
         models.Exercise.id != request.current_exercise_id
     )
     
@@ -95,7 +106,7 @@ def get_alternative_exercise(db: Session, request: schemas.ReplaceExerciseReques
         # Jeśli nie ma alternatywy w tej samej kategorii, spróbuj bez filtra kategorii
         alternatives = db.query(models.Exercise).filter(
             models.Exercise.muscle_group == request.muscle_group,
-            models.Exercise.equipment == request.equipment,
+            models.Exercise.equipment.in_(allowed_eq),
             models.Exercise.id != request.current_exercise_id
         ).all()
         
@@ -105,9 +116,10 @@ def get_alternative_exercise(db: Session, request: schemas.ReplaceExerciseReques
     return random.choice(alternatives)
 
 def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.PlanResponse:
+    allowed_eq = get_allowed_equipment(request.equipment.value)
     available_exercises = db.query(models.Exercise).filter(
         models.Exercise.muscle_group.notin_(request.contraindicated_muscles),
-        models.Exercise.equipment == request.equipment.value
+        models.Exercise.equipment.in_(allowed_eq)
     ).all()
 
     exercises_by_muscle = {}
@@ -151,12 +163,24 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         "military press", "shoulder press", "bent over row", "lat pulldown", "dips",
         "lunge", "barbell curl", "triceps pushdown", "plank", "crunch", "leg press",
         "dumbbell bench press", "lateral raise", "calf raise", "romanian deadlift",
-        "dumbbell curl", "leg extension", "leg curl", "dumbbell row"
+        "dumbbell curl", "leg extension", "leg curl", "dumbbell row", "face pull",
+        "overhead press", "bulgarian split squat", "front squat"
+    ]
+    
+    BANNED_KEYWORDS = [
+        "atlas", "stone", "tire", "sled", "battling rope", "yoke", "sandbag", "prowler",
+        "rickshaw", "car deadlift", "sledgehammer", "chain", "chains", "band ", "bands ",
+        "stability ball", "bosu", "neck", "suspension", "trx", "board press", "guillotine",
+        "floor press", "power snatch", "clean and jerk", "rocky", "otiz", "zercher"
     ]
 
     def score_exercise(ex: models.Exercise) -> int:
         score = 0
         name_low = ex.name.lower()
+        
+        # Odrzuć dziwne ćwiczenia strongman/crossfit jeśli szukamy standardowego planu na siłownię
+        if any(banned in name_low for banned in BANNED_KEYWORDS):
+            return -1000 # Gwarancja, że nie wylosuje się jako domyślne
         
         if ex.category == "Złożone":
             score += 20
@@ -170,12 +194,14 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                     score += 20
                 break
                 
-        # Deklasuj udziwnienia w generowaniu
-        if "smith machine" in name_low or "band" in name_low or "cable" in name_low or "stability ball" in name_low or "one-arm" in name_low or "single" in name_low or "seated" in name_low:
-            score -= 15
+        # Deklasuj nieoptymalne modyfikatory (np. ćwiczenia jednorącz na maszynie zamiast klasyki)
+        if "smith machine" in name_low or "one-arm" in name_low or "single" in name_low or "behind the neck" in name_low:
+            score -= 25
             
-        # Niewielki element losowości, żeby plany nie były identyczne w 100% każdego dnia, ale w 90%
-        # Nie dajemy tu random, bo chcemy pełnej standaryzacji przy pierwszym generowaniu
+        # Promuj klasyczny sprzęt jeśli użytkownik wybrał siłownię
+        if request.equipment == schemas.EquipmentType.gym:
+            if "barbell" in name_low or "dumbbell" in name_low or "cable" in name_low or "machine" in name_low:
+                score += 10
             
         return score
 
@@ -187,7 +213,11 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         if muscle not in exercises_by_muscle or not exercises_by_muscle[muscle]:
             return []
         
-        available = exercises_by_muscle[muscle].copy()
+        # Filtrujemy na wstępie te skrajnie niechciane
+        available = [ex for ex in exercises_by_muscle[muscle] if score_exercise(ex) > -500]
+        
+        if not available: # Fallback jeśli na daną partię zostały same dziwne ćwiczenia
+             available = exercises_by_muscle[muscle].copy()
         
         # Sortowanie: najpierw po ocenie (malejąco), potem odrzucamy użyte (na koniec listy)
         available.sort(key=lambda ex: (0 if ex.id in used_exercise_ids else 1, score_exercise(ex)), reverse=True)

@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from database import engine, SessionLocal, Base
 import models
 from gif_data import GIF_EXERCISES
-from translations_data import EXERCISE_NAMES_PL
 
 # Wczytaj cache tłumaczeń
 try:
@@ -12,13 +11,25 @@ try:
     with open(os.path.join(current_dir, "translation_cache.json"), 'r', encoding='utf-8') as f:
         TRANSLATION_CACHE = json.load(f)
 except Exception as e:
-    print(f"Nie udało się załadować cache tłumaczeń: {e}")
+    print(f"Nie udało się załadować cache tłumaczeń instrukcji: {e}")
     TRANSLATION_CACHE = {}
+
+# Wczytaj wygenerowane polskie nazwy ćwiczeń
+try:
+    with open(os.path.join(current_dir, "generated_names_pl.json"), 'r', encoding='utf-8') as f:
+        NAMES_CACHE = json.load(f)
+except Exception as e:
+    print(f"Nie udało się załadować cache nazw ćwiczeń: {e}")
+    NAMES_CACHE = {}
 
 def get_pl_translation(text, default=""):
     """Zwraca tłumaczenie z cache, lub wartość domyślną."""
     if not text: return default
     return TRANSLATION_CACHE.get(text, default)
+
+def get_pl_name(name_en):
+    """Zwraca polską nazwę z wygenerowanego słownika lub oryginał."""
+    return NAMES_CACHE.get(name_en, name_en)
 
 # Inicjalizacja bazy
 Base.metadata.drop_all(bind=engine)
@@ -93,6 +104,18 @@ EQUIPMENT_MAPPING = {
 
 def seed():
     db = SessionLocal()
+    
+    BANNED_KEYWORDS = [
+        "atlas", "stone", "tire", "sled", "battling rope", "yoke", "sandbag", "prowler",
+        "rickshaw", "car deadlift", "sledgehammer", "chain", "chains", "band ", "bands ",
+        "stability ball", "bosu", "neck", "suspension", "trx", "board press", "guillotine",
+        "floor press", "power snatch", "clean and jerk", "rocky", "otiz", "zercher", "spell caster", "yoke walk"
+    ]
+    
+    BANNED_INSTRUCTION_KEYWORDS = [
+        "partner", "someone", "assistant", "third person"
+    ]
+    
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(current_dir)
@@ -113,7 +136,19 @@ def seed():
                         
                         name_en_raw = data.get("name", filename.replace(".json", "").replace("_", " "))
                         name_en = " ".join([w.capitalize() for w in name_en_raw.split()])
-                        name_pl = EXERCISE_NAMES_PL.get(name_en, name_en)
+                        
+                        if any(banned in name_en.lower() for banned in BANNED_KEYWORDS):
+                            continue
+                            
+                        raw_instructions = data.get("instructions", [])
+                        concise_instructions = raw_instructions[:3]
+                        
+                        # Filtrowanie po instrukcjach (partner, osoba trzecia)
+                        instructions_text = " ".join(concise_instructions).lower()
+                        if any(banned in instructions_text for banned in BANNED_INSTRUCTION_KEYWORDS):
+                            continue
+                            
+                        name_pl = get_pl_name(name_en)
                         
                         primary_muscle = data.get("primaryMuscles", [""])[0]
                         muscle_group = MUSCLE_MAPPING.get(primary_muscle, "Inne")
@@ -164,7 +199,18 @@ def seed():
         for item in GIF_EXERCISES:
             name_en_raw = item.get("name")
             name_en = " ".join([w.capitalize() for w in name_en_raw.split()])
-            name_pl = EXERCISE_NAMES_PL.get(name_en, name_en)
+            
+            if any(banned in name_en.lower() for banned in BANNED_KEYWORDS):
+                continue
+                
+            raw_instructions = item.get("instructions", [])
+            concise_instructions = raw_instructions[:3]
+            
+            instructions_text = " ".join(concise_instructions).lower()
+            if any(banned in instructions_text for banned in BANNED_INSTRUCTION_KEYWORDS):
+                continue
+                
+            name_pl = get_pl_name(name_en)
             
             target_muscle = item.get("targetMuscles", [""])[0]
             muscle_group = MUSCLE_MAPPING.get(target_muscle, "Inne")
