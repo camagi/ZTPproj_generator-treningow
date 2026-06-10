@@ -46,6 +46,7 @@ export default function Home() {
       days_per_week: parseInt(formData.get("days") as string),
       experience_level: formData.get("experience_level") as string,
       goal: formData.get("goal") as string,
+      equipment: formData.get("equipment") as string,
       contraindicated_muscles,
     };
 
@@ -130,21 +131,32 @@ export default function Home() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
+                    <label htmlFor="equipment" className="block font-semibold text-gray-700">Dostępny sprzęt:</label>
+                    <select id="equipment" name="equipment" defaultValue="gym" required
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
+                        <option value="gym">Pełna siłownia</option>
+                        <option value="dumbbells">Tylko hantle</option>
+                        <option value="bodyweight">Kalistenika (Masa własna)</option>
+                        <option value="bands">Gumy oporowe</option>
+                    </select>
+                </div>
+
+                <div className="space-y-2">
                     <label htmlFor="days" className="block font-semibold text-gray-700">Ilość dni w tygodniu (1-5):</label>
                     <input type="number" id="days" name="days" min="1" max="5" required placeholder="np. 3"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" />
                 </div>
+            </div>
 
-                <div className="space-y-2">
-                    <label htmlFor="workout_type" className="block font-semibold text-gray-700">Preferowany typ treningu:</label>
-                    <select id="workout_type" name="workout_type" defaultValue="auto"
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
-                        <option value="auto">Automatyczny dobór</option>
-                        <option value="FBW">Full Body Workout (FBW)</option>
-                        <option value="PPL">Push / Pull / Legs</option>
-                        <option value="Split">Split (Partie rozdzielone)</option>
-                    </select>
-                </div>
+            <div className="space-y-2">
+                <label htmlFor="workout_type" className="block font-semibold text-gray-700">Preferowany typ treningu:</label>
+                <select id="workout_type" name="workout_type" defaultValue="auto"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
+                    <option value="auto">Automatyczny dobór</option>
+                    <option value="FBW">Full Body Workout (FBW)</option>
+                    <option value="PPL">Push / Pull / Legs</option>
+                    <option value="Split">Split (Partie rozdzielone)</option>
+                </select>
             </div>
 
             <div className="space-y-3 pt-2 border-t border-gray-100">

@@ -17,10 +17,17 @@ class TrainingGoal(str, Enum):
     hypertrophy = "hypertrophy"
     strength = "strength"
 
+class EquipmentType(str, Enum):
+    gym = "gym"
+    dumbbells = "dumbbells"
+    bodyweight = "bodyweight"
+    bands = "bands"
+
 class ExerciseBase(BaseModel):
     name: str
     muscle_group: str
     category: Optional[str] = None
+    equipment: Optional[str] = "gym"
     description: Optional[str] = None
 
 class ExerciseResponse(ExerciseBase):
@@ -39,6 +46,7 @@ class PlanRequest(BaseModel):
     experience_level: ExperienceLevel = ExperienceLevel.intermediate
     workout_type: Optional[WorkoutType] = None
     goal: TrainingGoal = TrainingGoal.hypertrophy
+    equipment: EquipmentType = EquipmentType.gym
 
 class WorkoutDayResponse(BaseModel):
     day: int

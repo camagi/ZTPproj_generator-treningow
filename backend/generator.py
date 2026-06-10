@@ -26,7 +26,8 @@ def assign_volume(exercise: models.Exercise, goal: schemas.TrainingGoal) -> Dict
 
 def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.PlanResponse:
     available_exercises = db.query(models.Exercise).filter(
-        models.Exercise.muscle_group.notin_(request.contraindicated_muscles)
+        models.Exercise.muscle_group.notin_(request.contraindicated_muscles),
+        models.Exercise.equipment == request.equipment.value
     ).all()
 
     exercises_by_muscle = {}
