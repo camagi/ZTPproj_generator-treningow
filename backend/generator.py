@@ -173,6 +173,16 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         "stability ball", "bosu", "neck", "suspension", "trx", "board press", "guillotine",
         "floor press", "power snatch", "clean and jerk", "rocky", "otiz", "zercher"
     ]
+    
+    ADVANCED_KEYWORDS = [
+        "muscle up", "muscle-up", "snatch", "clean", "jerk", "front lever", "back lever",
+        "planche", "human flag", "pistol squat", "handstand", "dragon flag", "kipping"
+    ]
+    
+    INTERMEDIATE_KEYWORDS = [
+        "deadlift", "front squat", "overhead squat", "good morning", "bulgarian",
+        "hanging leg raise", "ab wheel", "rollout"
+    ]
 
     def score_exercise(ex: models.Exercise) -> int:
         score = 0
@@ -181,6 +191,16 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         # Odrzuć dziwne ćwiczenia strongman/crossfit jeśli szukamy standardowego planu na siłownię
         if any(banned in name_low for banned in BANNED_KEYWORDS):
             return -1000 # Gwarancja, że nie wylosuje się jako domyślne
+            
+        # Odrzucanie zaawansowanych ćwiczeń dla początkujących
+        if request.experience_level == schemas.ExperienceLevel.beginner:
+            if any(adv in name_low for adv in ADVANCED_KEYWORDS) or any(inter in name_low for inter in INTERMEDIATE_KEYWORDS):
+                return -1000
+                
+        # Odrzucanie bardzo zaawansowanych ćwiczeń dla średniozaawansowanych
+        if request.experience_level == schemas.ExperienceLevel.intermediate:
+            if any(adv in name_low for adv in ADVANCED_KEYWORDS):
+                return -1000
         
         if ex.category == "Złożone":
             score += 20
@@ -208,6 +228,39 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
     # Zbiór ID ćwiczeń już użytych w całym planie
     used_exercise_ids = set()
 
+    # Rodziny ruchów zapobiegające dublowaniu tego samego wzorca na jednej sesji
+    MOVEMENT_FAMILIES = {
+        "row": ["row"],
+        "pulldown": ["pulldown", "pull-up", "chin-up"],
+        "deadlift": ["deadlift", "good morning"],
+        "horizontal_press": ["bench press", "floor press", "fly", "push-up"],
+        "vertical_press": ["shoulder press", "military press", "push press"],
+        "squat": ["squat", "leg press"],
+        "lunge": ["lunge", "split squat", "step-up"],
+        "curl": ["curl"],
+        "extension": ["extension", "pushdown", "skull crusher", "kickback"],
+        "raise": ["raise", "shrug"],
+        "dip": ["dip"]
+    }
+
+    def get_movement_family(name: str) -> str:
+        name_low = name.lower()
+        family_base = "other"
+        for family, keywords in MOVEMENT_FAMILIES.items():
+            if any(kw in name_low for kw in keywords):
+                family_base = family
+                break
+                
+        # Sub-kategoryzacja na podstawie chwytu, aby zróżnicować np. wiosłowanie nachwytem od podchwytu
+        if "reverse" in name_low or "underhand" in name_low or "podchwyt" in name_low:
+            family_base += "_underhand"
+        elif "close" in name_low or "narrow" in name_low or "wąsk" in name_low:
+            family_base += "_close"
+        elif "wide" in name_low or "szerok" in name_low:
+            family_base += "_wide"
+            
+        return family_base
+
     # Funkcja pomocnicza do wybierania ćwiczeń
     def pick_exercises(muscle: str, count: int, prefer_compound: bool = False) -> List[models.Exercise]:
         if muscle not in exercises_by_muscle or not exercises_by_muscle[muscle]:
@@ -219,27 +272,51 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         if not available: # Fallback jeśli na daną partię zostały same dziwne ćwiczenia
              available = exercises_by_muscle[muscle].copy()
         
-        # Sortowanie: najpierw po ocenie (malejąco), potem odrzucamy użyte (na koniec listy)
-        available.sort(key=lambda ex: (0 if ex.id in used_exercise_ids else 1, score_exercise(ex)), reverse=True)
-        
         chosen = []
+        used_families_this_session = set()
         
-        if prefer_compound:
-            compounds = [ex for ex in available if ex.category == "Złożone"]
-            if compounds:
-                best_compound = compounds[0]
-                chosen.append(best_compound)
-                available.remove(best_compound)
-                used_exercise_ids.add(best_compound.id)
-                count -= 1
+        # Wewnętrzna funkcja sortująca, która dodatkowo karze za duplikaty ruchów
+        def dynamic_score(ex: models.Exercise) -> tuple:
+            # Tupla sortująca:
+            # 1. Nie użyto nigdy w planie (1) vs użyto (0)
+            # 2. Nie użyto rodziny ruchu w TEJ SESJI na TĄ PARTIĘ (1) vs użyto (0) - Drastyczna kara
+            # 3. Bazowy wynik punktowy
+            is_new = 0 if ex.id in used_exercise_ids else 1
+            family = get_movement_family(ex.name)
+            
+            # Wymuszamy, by priorytetem był CAŁKIEM NOWY RUCH (np. po wyciskaniu nie bierzemy znowu wyciskania, tylko rozpiętki/dipsy)
+            is_new_family = 0 if family in used_families_this_session else 1000
+            
+            # Jeśli rodzina jest zajęta, to ma ujemny priorytet, aby ustąpić miejsca innym
+            family_score = is_new_family
+            
+            return (is_new, family_score, score_exercise(ex))
+
+        # Dobieramy po jednym ćwiczeniu odświeżając sortowanie
+        while count > 0 and available:
+            available.sort(key=dynamic_score, reverse=True)
+            
+            # Jeśli potrzebujemy złożeń, upewnijmy się, że na start bierzemy złożone
+            best_ex = None
+            if prefer_compound:
+                for ex in available:
+                    if ex.category == "Złożone":
+                        best_ex = ex
+                        break
+            
+            if not best_ex:
+                best_ex = available[0]
                 
-        # Dobierz resztę
-        num_to_choose = min(count, len(available))
-        if num_to_choose > 0:
-            selected = available[:num_to_choose]
-            chosen.extend(selected)
-            for ex in selected:
-                used_exercise_ids.add(ex.id)
+            chosen.append(best_ex)
+            available.remove(best_ex)
+            used_exercise_ids.add(best_ex.id)
+            
+            fam = get_movement_family(best_ex.name)
+            if fam != "other":
+                used_families_this_session.add(fam)
+                
+            count -= 1
+            prefer_compound = False # Tylko pierwsze musiało być złożone
             
         return chosen
 

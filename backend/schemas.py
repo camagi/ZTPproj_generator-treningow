@@ -33,6 +33,7 @@ class ExerciseBase(BaseModel):
     name: str
     name_pl: Optional[str] = None
     muscle_group: str
+    sub_muscle: Optional[str] = None
     category: Optional[str] = None
     equipment: Optional[str] = "gym"
     description: Optional[str] = None

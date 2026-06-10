@@ -31,6 +31,50 @@ def get_pl_name(name_en):
     """Zwraca polską nazwę z wygenerowanego słownika lub oryginał."""
     return NAMES_CACHE.get(name_en, name_en)
 
+def determine_sub_muscle(name_en, muscle_group, original_primary):
+    name_low = name_en.lower()
+    orig_low = original_primary.lower() if original_primary else ""
+    
+    if muscle_group == "Klatka":
+        if "incline" in name_low: return "Góra klatki"
+        if "decline" in name_low or "dip" in name_low: return "Dół klatki"
+        return "Środek klatki"
+    elif muscle_group == "Plecy":
+        if "pulldown" in name_low or "pull-up" in name_low or "chin-up" in name_low or "lats" in orig_low: return "Szerokość pleców"
+        if "deadlift" in name_low or "hyperextension" in name_low or "good morning" in name_low or "lower back" in orig_low or "spine" in orig_low: return "Dół pleców"
+        return "Grubość i górny grzbiet"
+    elif muscle_group == "Nogi":
+        if "calf" in name_low or "calves" in orig_low:
+            if "seated" in name_low: return "Łydki - dolna część"
+            return "Łydki - górna część"
+        if "glute" in name_low or "glutes" in orig_low or "hip thrust" in name_low: return "Pośladki"
+        if "hamstring" in name_low or "hamstrings" in orig_low or "romanian" in name_low or "stiff" in name_low or "leg curl" in name_low: return "Tył uda"
+        if "adductor" in name_low or "adductors" in orig_low or "groin" in name_low: return "Wewnętrzna strona ud"
+        if "abductor" in name_low or "abductors" in orig_low: return "Zewnętrzna strona ud"
+        return "Przód uda"
+    elif muscle_group == "Barki":
+        if "rear" in name_low or "face pull" in name_low: return "Tylny akton"
+        if "lateral" in name_low or "side" in name_low: return "Boczny akton"
+        if "front" in name_low: return "Przedni akton"
+        return "Przedni akton"
+    elif muscle_group == "Biceps":
+        if "forearm" in orig_low or "brachialis" in orig_low or "reverse" in name_low or "hammer" in name_low: return "Góra przedramienia"
+        if "wrist" in name_low: return "Dół przedramienia"
+        if "incline" in name_low or "drag" in name_low: return "Biceps - głowa długa"
+        if "preacher" in name_low or "concentration" in name_low: return "Biceps - głowa krótka"
+        return "Biceps - ogólnie"
+    elif muscle_group == "Triceps":
+        if "overhead" in name_low or "skull crusher" in name_low or "french" in name_low: return "Triceps - głowa długa"
+        if "pushdown" in name_low or "kickback" in name_low or "dip" in name_low or "close-grip" in name_low or "close grip" in name_low: return "Triceps - głowa boczna i przyśrodkowa"
+        return "Triceps - głowa boczna i przyśrodkowa"
+    elif muscle_group == "Brzuch":
+        if "oblique" in name_low or "obliques" in orig_low or "twist" in name_low or "side" in name_low: return "Boki brzucha"
+        if "leg raise" in name_low or "lower abs" in orig_low: return "Dół brzucha"
+        if "plank" in name_low or "rollout" in name_low or "core" in orig_low: return "Głęboka stabilizacja"
+        return "Góra brzucha"
+    
+    return None
+
 # Inicjalizacja bazy
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
@@ -153,6 +197,14 @@ def seed():
                         primary_muscle = data.get("primaryMuscles", [""])[0]
                         muscle_group = MUSCLE_MAPPING.get(primary_muscle, "Inne")
                         
+                        # Ręczne poprawki na błędne tagowanie z jsonów
+                        if "lunge" in name_en.lower() or "squat" in name_en.lower() or "leg press" in name_en.lower():
+                            muscle_group = "Nogi"
+                        if "pushdown" in name_en.lower() or "triceps" in name_en.lower():
+                            muscle_group = "Triceps"
+                        if "curl" in name_en.lower() and "leg" not in name_en.lower():
+                            muscle_group = "Biceps"
+                            
                         equipment_raw = data.get("equipment", "gym")
                         if equipment_raw is None: equipment_raw = "body only"
                         equipment = EQUIPMENT_MAPPING.get(equipment_raw, "gym")
@@ -174,10 +226,13 @@ def seed():
                         
                         images = json.dumps([f"exercises/{img}" for img in data.get("images", [])])
                         
+                        sub_muscle = determine_sub_muscle(name_en, muscle_group, primary_muscle)
+                        
                         exercise = models.Exercise(
                             name=name_en,
                             name_pl=name_pl,
                             muscle_group=muscle_group,
+                            sub_muscle=sub_muscle,
                             category=category,
                             equipment=equipment,
                             description=raw_instructions[0] if raw_instructions else "",
@@ -234,6 +289,7 @@ def seed():
             instructions_pl = json.dumps(instructions_pl)
             
             gif_url = f"gifs_720x720/{item.get('gifUrl')}"
+            sub_muscle = determine_sub_muscle(name_en, muscle_group, target_muscle)
             
             db.flush()
             existing = db.query(models.Exercise).filter(models.Exercise.name == name_en).first()
@@ -243,6 +299,7 @@ def seed():
                 existing.name_pl = name_pl
                 existing.instructions_pl = instructions_pl
                 existing.muscle_group = muscle_group
+                existing.sub_muscle = sub_muscle
                 existing.equipment = equipment
                 existing.category = category
             else:
@@ -250,6 +307,7 @@ def seed():
                     name=name_en,
                     name_pl=name_pl,
                     muscle_group=muscle_group,
+                    sub_muscle=sub_muscle,
                     category=category,
                     equipment=equipment,
                     description=raw_instructions[0] if raw_instructions else "",

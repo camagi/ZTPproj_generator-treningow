@@ -123,11 +123,42 @@ const CATEGORIES_MAP: Record<string, { pl: string, en: string }> = {
   "Izolowane": { pl: "Izolowane", en: "Isolation" }
 };
 
+const SUB_MUSCLE_MAP: Record<string, {pl: string, en: string}> = {
+    "Góra klatki": { pl: "Góra klatki", en: "Upper Chest" },
+    "Dół klatki": { pl: "Dół klatki", en: "Lower Chest" },
+    "Środek klatki": { pl: "Środek klatki", en: "Middle Chest" },
+    "Szerokość pleców": { pl: "Szerokość pleców", en: "Lats / Back Width" },
+    "Grubość i górny grzbiet": { pl: "Grubość i górny grzbiet", en: "Upper Back & Thickness" },
+    "Dół pleców": { pl: "Dół pleców", en: "Lower Back" },
+    "Przód uda": { pl: "Przód uda", en: "Quads" },
+    "Tył uda": { pl: "Tył uda", en: "Hamstrings" },
+    "Pośladki": { pl: "Pośladki", en: "Glutes" },
+    "Łydki - górna część": { pl: "Łydki - górna", en: "Upper Calves" },
+    "Łydki - dolna część": { pl: "Łydki - dolna", en: "Lower Calves" },
+    "Wewnętrzna strona ud": { pl: "Wewnętrzna strona ud", en: "Inner Thighs" },
+    "Zewnętrzna strona ud": { pl: "Zewnętrzna strona ud", en: "Outer Thighs" },
+    "Przedni akton": { pl: "Przód barku", en: "Front Delts" },
+    "Boczny akton": { pl: "Bok barku", en: "Side Delts" },
+    "Tylny akton": { pl: "Tył barku", en: "Rear Delts" },
+    "Biceps - głowa długa": { pl: "Biceps (gł. długa)", en: "Biceps (Long Head)" },
+    "Biceps - głowa krótka": { pl: "Biceps (gł. krótka)", en: "Biceps (Short Head)" },
+    "Triceps - głowa długa": { pl: "Triceps (gł. długa)", en: "Triceps (Long Head)" },
+    "Triceps - głowa boczna i przyśrodkowa": { pl: "Triceps (boczny/przyśr.)", en: "Triceps (Lateral/Medial)" },
+    "Góra przedramienia": { pl: "Góra przedramienia", en: "Upper Forearms" },
+    "Dół przedramienia": { pl: "Dół przedramienia", en: "Lower Forearms" },
+    "Góra brzucha": { pl: "Góra brzucha", en: "Upper Abs" },
+    "Dół brzucha": { pl: "Dół brzucha", en: "Lower Abs" },
+    "Boki brzucha": { pl: "Boki brzucha", en: "Obliques" },
+    "Głęboka stabilizacja": { pl: "Głęboka stabilizacja", en: "Core Stabilization" },
+    "Biceps - ogólnie": { pl: "Biceps - ogólnie", en: "Biceps (General)" },
+};
+
 type Exercise = {
   id: number;
   name: string;
   name_pl: string;
   muscle_group: string;
+  sub_muscle: string | null;
   category: string | null;
   description: string | null;
   sets: number | null;
@@ -503,10 +534,15 @@ export default function Home() {
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 mt-1">
+                                    <div className="flex gap-2 mt-1 flex-wrap">
                                         <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500">
                                           {MUSCLE_GROUPS_MAP[ex.muscle_group]?.[lang] || ex.muscle_group}
                                         </span>
+                                        {ex.sub_muscle && (
+                                          <span className="text-[10px] uppercase tracking-wider font-bold text-purple-500 bg-purple-50 px-1.5 rounded-sm">
+                                            {SUB_MUSCLE_MAP[ex.sub_muscle]?.[lang] || ex.sub_muscle}
+                                          </span>
+                                        )}
                                         {ex.category && (
                                           <span className="text-[10px] uppercase tracking-wider font-bold text-blue-500">
                                             {CATEGORIES_MAP[ex.category]?.[lang] || ex.category}
