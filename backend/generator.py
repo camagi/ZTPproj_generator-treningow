@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 import models
 import schemas
+import generator_templates
 
 def get_exercises_by_category(exercises: List[models.Exercise], category: str) -> List[models.Exercise]:
     return [ex for ex in exercises if ex.category == category]
@@ -184,74 +185,33 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
         "hanging leg raise", "ab wheel", "rollout"
     ]
 
-    def score_exercise(ex: models.Exercise) -> int:
-        score = 0
-        name_low = ex.name.lower()
-        
-        # Odrzuć dziwne ćwiczenia strongman/crossfit jeśli szukamy standardowego planu na siłownię
-        if any(banned in name_low for banned in BANNED_KEYWORDS):
-            return -1000 # Gwarancja, że nie wylosuje się jako domyślne
-            
-        # Odrzucanie zaawansowanych ćwiczeń dla początkujących
-        if request.experience_level == schemas.ExperienceLevel.beginner:
-            if any(adv in name_low for adv in ADVANCED_KEYWORDS) or any(inter in name_low for inter in INTERMEDIATE_KEYWORDS):
-                return -1000
-                
-        # Odrzucanie bardzo zaawansowanych ćwiczeń dla średniozaawansowanych
-        if request.experience_level == schemas.ExperienceLevel.intermediate:
-            if any(adv in name_low for adv in ADVANCED_KEYWORDS):
-                return -1000
-        
-        if ex.category == "Złożone":
-            score += 20
-            
-        # Promuj "najlepsze" podstawowe ćwiczenia
-        for kw in OPTIMAL_KEYWORDS:
-            if kw in name_low:
-                score += 50
-                # Ścisłe dopasowanie dostaje jeszcze więcej punktów
-                if kw == name_low:
-                    score += 20
-                break
-                
-        # Deklasuj nieoptymalne modyfikatory (np. ćwiczenia jednorącz na maszynie zamiast klasyki)
-        if "smith machine" in name_low or "one-arm" in name_low or "single" in name_low or "behind the neck" in name_low:
-            score -= 25
-            
-        # Promuj klasyczny sprzęt jeśli użytkownik wybrał siłownię
-        if request.equipment == schemas.EquipmentType.gym:
-            if "barbell" in name_low or "dumbbell" in name_low or "cable" in name_low or "machine" in name_low:
-                score += 10
-            
-        return score
-
     # Zbiór ID ćwiczeń już użytych w całym planie
     used_exercise_ids = set()
 
     # Rodziny ruchów zapobiegające dublowaniu tego samego wzorca na jednej sesji
     MOVEMENT_FAMILIES = {
-        "row": ["row"],
-        "pulldown": ["pulldown", "pull-up", "chin-up"],
-        "deadlift": ["deadlift", "good morning"],
-        "horizontal_press": ["bench press", "floor press", "fly", "push-up"],
-        "vertical_press": ["shoulder press", "military press", "push press"],
-        "squat": ["squat", "leg press"],
-        "lunge": ["lunge", "split squat", "step-up"],
-        "curl": ["curl"],
-        "extension": ["extension", "pushdown", "skull crusher", "kickback"],
-        "raise": ["raise", "shrug"],
-        "dip": ["dip"]
+        "row": ["row", "wiosło"],
+        "pulldown": ["pulldown", "pull-up", "chin-up", "ściąg"],
+        "deadlift": ["deadlift", "good morning", "martw"],
+        "horizontal_press": ["bench press", "floor press", "fly", "push-up", "rozpiętk", "pompk"],
+        "vertical_press": ["shoulder press", "military press", "push press", "wyciskanie nad"],
+        "squat": ["squat", "leg press", "przysiad", "suwnic"],
+        "lunge": ["lunge", "split squat", "step-up", "wykrok"],
+        "curl": ["curl", "uginan"],
+        "extension": ["extension", "pushdown", "skull crusher", "kickback", "prostowan"],
+        "raise": ["raise", "shrug", "wznos", "szrugs"],
+        "dip": ["dip", "poręcz"]
     }
 
-    def get_movement_family(name: str) -> str:
-        name_low = name.lower()
+    def get_movement_family(name: str, name_pl: str) -> str:
+        name_low = f"{name} {name_pl}".lower()
         family_base = "other"
         for family, keywords in MOVEMENT_FAMILIES.items():
             if any(kw in name_low for kw in keywords):
                 family_base = family
                 break
                 
-        # Sub-kategoryzacja na podstawie chwytu, aby zróżnicować np. wiosłowanie nachwytem od podchwytu
+        # Sub-kategoryzacja na podstawie chwytu
         if "reverse" in name_low or "underhand" in name_low or "podchwyt" in name_low:
             family_base += "_underhand"
         elif "close" in name_low or "narrow" in name_low or "wąsk" in name_low:
@@ -261,151 +221,135 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
             
         return family_base
 
-    # Funkcja pomocnicza do wybierania ćwiczeń
-    def pick_exercises(muscle: str, count: int, prefer_compound: bool = False) -> List[models.Exercise]:
-        if muscle not in exercises_by_muscle or not exercises_by_muscle[muscle]:
-            return []
+    def find_best_exercise_for_slot(slot_dict, available_exs, used_families_this_session):
+        target_muscle = slot_dict["muscle"]
+        keywords = slot_dict.get("kw", [])
         
-        # Filtrujemy na wstępie te skrajnie niechciane
-        available = [ex for ex in exercises_by_muscle[muscle] if score_exercise(ex) > -500]
+        candidates = [e for e in available_exs if e.muscle_group == target_muscle]
         
-        if not available: # Fallback jeśli na daną partię zostały same dziwne ćwiczenia
-             available = exercises_by_muscle[muscle].copy()
+        # Jeśli użytkownik wykluczył tę partię mięśniową, nie dobieramy niczego zastępczego z innych partii
+        if not candidates:
+            return None
+            
+        def score(ex):
+            s = 0
+            name_low = ex.name.lower()
+            name_pl_low = ex.name_pl.lower() if ex.name_pl else ""
+            text_to_search = f"{name_low} {name_pl_low} {ex.sub_muscle} {ex.category}".lower()
+            
+            # Wyrzucamy ćwiczenia typu rozciąganie, joga, dziwne mobilnościowe
+            if "stretch" in name_low or "rozciąg" in name_pl_low or "90/90" in name_low or "mobility" in name_low or "yoga" in name_low:
+                s -= 5000
+            
+            # Dopasowanie słów kluczowych z szablonu
+            matched_kws = 0
+            for kw in keywords:
+                if kw.lower() in text_to_search:
+                    s += 60
+                    matched_kws += 1
+                    # Bonus za ścisłe dopasowanie w samej nazwie
+                    if kw.lower() in name_low or kw.lower() in name_pl_low:
+                        s += 30 
+                        
+            # Jeśli ćwiczenie nie spełnia wymagań szablonu, spychamy je w dół
+            if keywords and matched_kws == 0:
+                s -= 150
+            
+            # Preferuj wielostawowe jeśli slot tego wymaga
+            if slot_dict.get("comp") and ex.category == "Złożone":
+                s += 40
+                
+            # WSPARCIE SPRZĘTU (Priorytetyzacja głównego wyboru)
+            # Jeśli użytkownik wybrał Siłownię, chcemy sztangi i maszyny, a nie pompki (chyba że to dipy/pullupy)
+            is_great_bodyweight = "pull-up" in name_low or "dip" in name_low or "podciąg" in name_pl_low or "poręcz" in name_pl_low
+            
+            if request.equipment == schemas.EquipmentType.gym:
+                if ex.equipment == "gym": s += 50
+                elif ex.equipment == "dumbbells": s += 30
+                elif ex.equipment == "bodyweight":
+                    if is_great_bodyweight: s += 50
+                    elif "plank" in name_low or "crunch" in name_low: s += 20 # ok dla brzucha
+                    else: s -= 20 # Odrzucamy bodyweight squat jeśli są sztangi!
+                    
+            elif request.equipment == schemas.EquipmentType.dumbbells:
+                if ex.equipment == "dumbbells": s += 60
+                elif ex.equipment == "bodyweight":
+                    if is_great_bodyweight: s += 50
+                    elif "plank" in name_low or "crunch" in name_low: s += 20
+                    else: s -= 10
+            
+            # Ogólna kara za dziwne ćwiczenia
+            if any(banned in name_low for banned in BANNED_KEYWORDS):
+                s -= 2000
+                
+            # Filtrowanie zaawansowania
+            if request.experience_level == schemas.ExperienceLevel.beginner:
+                if any(adv in name_low for adv in ADVANCED_KEYWORDS) or any(inter in name_low for inter in INTERMEDIATE_KEYWORDS):
+                    s -= 2000
+            elif request.experience_level == schemas.ExperienceLevel.intermediate:
+                if any(adv in name_low for adv in ADVANCED_KEYWORDS):
+                    s -= 2000
+                    
+            # Bardzo surowa kara za całkowity duplikat
+            if ex.id in used_exercise_ids:
+                s -= 10000
+                
+            # Zróżnicowanie ruchu na sesji (nie robimy 3 wiosłowań pod rząd)
+            fam = get_movement_family(ex.name, ex.name_pl)
+            if fam != "other" and fam in used_families_this_session:
+                s -= 800
+                
+            # Promocja ogólnie świetnych ćwiczeń
+            for okw in OPTIMAL_KEYWORDS:
+                if okw in name_low:
+                    s += 15
+                    break
+                    
+            return s
+            
+        candidates.sort(key=score, reverse=True)
         
-        chosen = []
+        # Nawet jeśli znaleźliśmy kandydatów, najlepszy może mieć tragiczny wynik (np. same duplikaty lub rozciągania). 
+        # Zwracamy pierwszego, chyba że baza jest skrajnie pusta.
+        best_ex = candidates[0]
+        used_exercise_ids.add(best_ex.id)
+        
+        fam = get_movement_family(best_ex.name, best_ex.name_pl)
+        if fam != "other":
+            used_families_this_session.add(fam)
+            
+        return best_ex
+
+    # Pobranie odpowiedniego szablonu dla danego poziomu i typu
+    workout_templates = generator_templates.TEMPLATES.get(workout_type, {}).get(request.experience_level, [])
+    
+    # Jeśli z jakiegoś powodu nie ma szablonu, fallback do PPL Beginner
+    if not workout_templates:
+        workout_templates = generator_templates.TEMPLATES[schemas.WorkoutType.ppl][schemas.ExperienceLevel.beginner]
+
+    # Budowanie planu na podstawie szablonów (powtarzamy szablony, jeśli dni > ilości szablonów)
+    for day in range(1, request.days_per_week + 1):
+        template = workout_templates[(day - 1) % len(workout_templates)]
+        day_exercises = []
         used_families_this_session = set()
         
-        # Wewnętrzna funkcja sortująca, która dodatkowo karze za duplikaty ruchów
-        def dynamic_score(ex: models.Exercise) -> tuple:
-            # Tupla sortująca:
-            # 1. Nie użyto nigdy w planie (1) vs użyto (0)
-            # 2. Nie użyto rodziny ruchu w TEJ SESJI na TĄ PARTIĘ (1) vs użyto (0) - Drastyczna kara
-            # 3. Bazowy wynik punktowy
-            is_new = 0 if ex.id in used_exercise_ids else 1
-            family = get_movement_family(ex.name)
-            
-            # Wymuszamy, by priorytetem był CAŁKIEM NOWY RUCH (np. po wyciskaniu nie bierzemy znowu wyciskania, tylko rozpiętki/dipsy)
-            is_new_family = 0 if family in used_families_this_session else 1000
-            
-            # Jeśli rodzina jest zajęta, to ma ujemny priorytet, aby ustąpić miejsca innym
-            family_score = is_new_family
-            
-            return (is_new, family_score, score_exercise(ex))
+        for slot in template["slots"]:
+            # Krótki trening - omijamy niektóre ćwiczenia (np. z końca) by skrócić objętość
+            if request.duration == schemas.WorkoutDuration.short and len(day_exercises) >= 4:
+                 # Skracamy do max 4-5 kluczowych ćwiczeń
+                 if slot["muscle"] in ["Biceps", "Triceps", "Brzuch", "Barki"] and len(day_exercises) > 4:
+                     continue
 
-        # Dobieramy po jednym ćwiczeniu odświeżając sortowanie
-        while count > 0 and available:
-            available.sort(key=dynamic_score, reverse=True)
-            
-            # Jeśli potrzebujemy złożeń, upewnijmy się, że na start bierzemy złożone
-            best_ex = None
-            if prefer_compound:
-                for ex in available:
-                    if ex.category == "Złożone":
-                        best_ex = ex
-                        break
-            
-            if not best_ex:
-                best_ex = available[0]
+            best_ex = find_best_exercise_for_slot(slot, available_exercises, used_families_this_session)
+            if best_ex:
+                volume = assign_volume(best_ex, request.goal, request.duration)
+                ex_resp = schemas.ExerciseResponse.model_validate(best_ex)
+                ex_resp.sets = volume["sets"]
+                ex_resp.reps = volume["reps"]
+                ex_resp.rest_time = volume["rest_time"]
+                day_exercises.append(ex_resp)
                 
-            chosen.append(best_ex)
-            available.remove(best_ex)
-            used_exercise_ids.add(best_ex.id)
-            
-            fam = get_movement_family(best_ex.name)
-            if fam != "other":
-                used_families_this_session.add(fam)
-                
-            count -= 1
-            prefer_compound = False # Tylko pierwsze musiało być złożone
-            
-        return chosen
-
-    # 3. Generowanie w zależności od typu
-    if workout_type == schemas.WorkoutType.fbw:
-        for day in range(1, request.days_per_week + 1):
-            day_exercises = []
-            # FBW - po 1-2 ćwiczenia na główną partię
-            muscles_order = ["Nogi", "Plecy", "Klatka", "Barki", "Biceps", "Triceps", "Brzuch"]
-            for group in muscles_order:
-                # Krótki trening: tylko po 1 ćwiczeniu na mniejsze partie
-                if request.duration == schemas.WorkoutDuration.short and group in ["Biceps", "Triceps", "Brzuch"]:
-                    ex_count = 1
-                else:
-                    ex_count = 1 if request.experience_level == schemas.ExperienceLevel.beginner else (2 if group in ["Nogi", "Plecy", "Klatka"] and volume_multiplier > 1 else 1)
-                
-                prefer_comp = request.experience_level == schemas.ExperienceLevel.beginner or request.duration == schemas.WorkoutDuration.short
-                
-                picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
-                for ex in picked:
-                    volume = assign_volume(ex, request.goal, request.duration)
-                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
-                    ex_resp.sets = volume["sets"]
-                    ex_resp.reps = volume["reps"]
-                    ex_resp.rest_time = volume["rest_time"]
-                    day_exercises.append(ex_resp)
-            
-            days_response.append(schemas.WorkoutDayResponse(day=day, focus="Full Body Workout", exercises=day_exercises))
-
-    elif workout_type == schemas.WorkoutType.ppl:
-        splits = [
-            {"name": "Push (Klatka, Barki, Triceps)", "muscles": ["Klatka", "Barki", "Triceps"]},
-            {"name": "Pull (Plecy, Biceps, Brzuch)", "muscles": ["Plecy", "Biceps", "Brzuch"]},
-            {"name": "Legs (Nogi)", "muscles": ["Nogi"]}
-        ]
-        # Pętla przez ilość dni, powtarzając split
-        for day in range(1, request.days_per_week + 1):
-            split = splits[(day - 1) % len(splits)]
-            day_exercises = []
-            
-            for group in split["muscles"]:
-                ex_count = volume_multiplier if group in ["Klatka", "Plecy", "Nogi"] else max(1, volume_multiplier - 1)
-                prefer_comp = request.experience_level != schemas.ExperienceLevel.advanced # Zaawansowani mają już dużo izolacji
-                
-                picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
-                for ex in picked:
-                    volume = assign_volume(ex, request.goal, request.duration)
-                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
-                    ex_resp.sets = volume["sets"]
-                    ex_resp.reps = volume["reps"]
-                    ex_resp.rest_time = volume["rest_time"]
-                    day_exercises.append(ex_resp)
-                    
-            days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
-
-    elif workout_type == schemas.WorkoutType.split:
-        splits = [
-            {"name": "Klatka + Triceps", "muscles": ["Klatka", "Triceps"]},
-            {"name": "Plecy + Biceps", "muscles": ["Plecy", "Biceps"]},
-            {"name": "Nogi + Brzuch", "muscles": ["Nogi", "Brzuch"]},
-            {"name": "Barki", "muscles": ["Barki"]},
-            {"name": "Full Body (Uzupełniający)", "muscles": ["Klatka", "Plecy", "Nogi", "Barki", "Biceps", "Triceps"]}
-        ]
-        for day in range(1, request.days_per_week + 1):
-            split = splits[(day - 1) % len(splits)]
-            day_exercises = []
-            
-            for group in split["muscles"]:
-                # W splicie objętość na partię jest zazwyczaj największa, bo trenujemy ją raz w tygodniu
-                base_count = 3 if group in ["Klatka", "Plecy", "Nogi", "Barki"] else 2
-                # Skalujemy przez mnożnik zaawansowania (ale pilnujemy maksimum)
-                ex_count = min(base_count + (volume_multiplier - 1), 5) 
-                
-                if request.duration == schemas.WorkoutDuration.short:
-                    ex_count = max(2, ex_count - 1)
-
-                if split["name"] == "Full Body (Uzupełniający)":
-                     ex_count = 1
-                     
-                picked = pick_exercises(group, ex_count, prefer_compound=True)
-                for ex in picked:
-                    volume = assign_volume(ex, request.goal, request.duration)
-                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
-                    ex_resp.sets = volume["sets"]
-                    ex_resp.reps = volume["reps"]
-                    ex_resp.rest_time = volume["rest_time"]
-                    day_exercises.append(ex_resp)
-                    
-            days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
+        days_response.append(schemas.WorkoutDayResponse(day=day, focus=template["focus"], exercises=day_exercises))
 
     # 4. Obliczanie sugestii dietetycznych
     nutrition = calculate_suggested_nutrition(
