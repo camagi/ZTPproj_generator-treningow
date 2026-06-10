@@ -23,6 +23,11 @@ class EquipmentType(str, Enum):
     bodyweight = "bodyweight"
     bands = "bands"
 
+class WorkoutDuration(str, Enum):
+    short = "short"  # 45 min
+    medium = "medium" # 60 min
+    long = "long"  # 90 min
+
 class ExerciseBase(BaseModel):
     name: str
     muscle_group: str
@@ -34,6 +39,7 @@ class ExerciseResponse(ExerciseBase):
     id: int
     sets: Optional[int] = None
     reps: Optional[str] = None
+    rest_time: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -47,6 +53,13 @@ class PlanRequest(BaseModel):
     workout_type: Optional[WorkoutType] = None
     goal: TrainingGoal = TrainingGoal.hypertrophy
     equipment: EquipmentType = EquipmentType.gym
+    duration: WorkoutDuration = WorkoutDuration.medium
+
+class NutritionResponse(BaseModel):
+    target_calories: int
+    protein_g: int
+    fat_g: int
+    carbs_g: int
 
 class WorkoutDayResponse(BaseModel):
     day: int
@@ -55,3 +68,4 @@ class WorkoutDayResponse(BaseModel):
 
 class PlanResponse(BaseModel):
     days: List[WorkoutDayResponse]
+    nutrition: Optional[NutritionResponse] = None

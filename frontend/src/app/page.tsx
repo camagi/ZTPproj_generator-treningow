@@ -13,6 +13,7 @@ type Exercise = {
   description: string | null;
   sets: number | null;
   reps: string | null;
+  rest_time: string | null;
 };
 
 type WorkoutDay = {
@@ -23,6 +24,12 @@ type WorkoutDay = {
 
 type PlanResponse = {
   days: WorkoutDay[];
+  nutrition: {
+    target_calories: number;
+    protein_g: number;
+    fat_g: number;
+    carbs_g: number;
+  } | null;
 };
 
 export default function Home() {
@@ -47,6 +54,7 @@ export default function Home() {
       experience_level: formData.get("experience_level") as string,
       goal: formData.get("goal") as string,
       equipment: formData.get("equipment") as string,
+      duration: formData.get("duration") as string,
       contraindicated_muscles,
     };
 
@@ -142,6 +150,16 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-2">
+                    <label htmlFor="duration" className="block font-semibold text-gray-700">Czas trwania treningu:</label>
+                    <select id="duration" name="duration" defaultValue="medium" required
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
+                        <option value="short">45 minut (Krótki)</option>
+                        <option value="medium">60 minut (Standardowy)</option>
+                        <option value="long">90 minut (Długi)</option>
+                    </select>
+                </div>
+
+                <div className="space-y-2">
                     <label htmlFor="days" className="block font-semibold text-gray-700">Ilość dni w tygodniu (1-5):</label>
                     <input type="number" id="days" name="days" min="1" max="5" required placeholder="np. 3"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" />
@@ -185,16 +203,54 @@ export default function Home() {
 
         {plan && (
           <section id="results" className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-3xl font-bold text-center text-gray-800">Twój Plan Treningowy</h2>
+            <h2 className="text-3xl font-bold text-center text-gray-800">Twoja Personalizacja</h2>
             
-            {plan.days.length === 0 ? (
-                <div className="text-center p-8 bg-white rounded-2xl shadow-sm">
-                    <p className="text-gray-500">Brak wyników do wyświetlenia z powodu podanych przeciwskazań.</p>
+            {plan.nutrition && (
+              <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-blue-100 space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                  <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <span className="text-2xl">🥗</span> Sugerowane Zalecenia Dietetyczne
+                  </h3>
+                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-wider">Wartości orientacyjne</span>
                 </div>
-            ) : (
-                <div className="space-y-6">
-                    {plan.days.map((day) => (
-                    <div key={day.day} className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+                
+                <p className="text-sm text-gray-500 italic">
+                  Obliczone dla przeciętnej osoby dorosłej (~30 lat) na podstawie Twoich danych. Dla precyzyjnych wyników skonsultuj się z dietetykiem.
+                </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-blue-600 text-white rounded-xl shadow-sm text-center">
+                    <span className="block text-[10px] uppercase font-bold opacity-80 mb-1">Cel Kaloryczny</span>
+                    <span className="text-2xl font-black">{plan.nutrition.target_calories}</span>
+                    <span className="text-[10px] block font-bold">kcal / dzień</span>
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-center">
+                    <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Białko</span>
+                    <span className="text-2xl font-black text-gray-800">{plan.nutrition.protein_g}g</span>
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-center">
+                    <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Tłuszcze</span>
+                    <span className="text-2xl font-black text-gray-800">{plan.nutrition.fat_g}g</span>
+                  </div>
+                  <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-center">
+                    <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Węglowodany</span>
+                    <span className="text-2xl font-black text-gray-800">{plan.nutrition.carbs_g}g</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">Plan Treningowy</h3>
+              
+              {plan.days.length === 0 ? (
+                  <div className="text-center p-8 bg-white rounded-2xl shadow-sm">
+                      <p className="text-gray-500">Brak wyników do wyświetlenia z powodu podanych przeciwskazań.</p>
+                  </div>
+              ) : (
+                  <div className="space-y-6">
+                      {plan.days.map((day) => (
+                      <div key={day.day} className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
                         <div className="bg-blue-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="text-xl font-bold text-blue-800">Dzień {day.day}</h3>
                         <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">{day.focus}</span>
@@ -223,6 +279,10 @@ export default function Home() {
                                         <span className="block text-[10px] text-gray-400 font-bold uppercase">Powt.</span>
                                         <span className="text-lg font-bold text-blue-600">{ex.reps}</span>
                                     </div>
+                                    <div className="text-center px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm min-w-[70px]">
+                                        <span className="block text-[10px] text-gray-400 font-bold uppercase">Przerwa</span>
+                                        <span className="text-lg font-bold text-blue-600">{ex.rest_time}</span>
+                                    </div>
                                 </div>
                                 </li>
                             ))}
@@ -231,8 +291,9 @@ export default function Home() {
                         </div>
                     </div>
                     ))}
-                </div>
-            )}
+                  </div>
+              )}
+            </div>
           </section>
         )}
       </main>

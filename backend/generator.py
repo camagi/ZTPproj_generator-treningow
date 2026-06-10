@@ -7,22 +7,76 @@ import schemas
 def get_exercises_by_category(exercises: List[models.Exercise], category: str) -> List[models.Exercise]:
     return [ex for ex in exercises if ex.category == category]
 
-def assign_volume(exercise: models.Exercise, goal: schemas.TrainingGoal) -> Dict[str, Any]:
+def assign_volume(exercise: models.Exercise, goal: schemas.TrainingGoal, duration: schemas.WorkoutDuration) -> Dict[str, Any]:
+    sets = 3
+    reps = "10-12"
+    rest = "60-90s"
+
+    # Podstawowe przypisanie na podstawie celu
     if goal == schemas.TrainingGoal.strength:
         if exercise.category == "Złożone":
-            return {"sets": 5, "reps": "5"}
+            sets, reps, rest = 5, "5", "180s"
         else:
-            return {"sets": 3, "reps": "8-10"}
+            sets, reps, rest = 3, "8-10", "120s"
     elif goal == schemas.TrainingGoal.reduction:
         if exercise.category == "Złożone":
-            return {"sets": 3, "reps": "12-15"}
+            sets, reps, rest = 3, "12-15", "60s"
         else:
-            return {"sets": 3, "reps": "15-20"}
+            sets, reps, rest = 3, "15-20", "45s"
     else:  # hypertrophy
         if exercise.category == "Złożone":
-            return {"sets": 4, "reps": "8-10"}
+            sets, reps, rest = 4, "8-10", "90-120s"
         else:
-            return {"sets": 3, "reps": "10-12"}
+            sets, reps, rest = 3, "10-12", "60-90s"
+
+    # Korekta na podstawie czasu trwania (duration)
+    if duration == schemas.WorkoutDuration.short:
+        sets = max(2, sets - 1)
+        # Skracamy przerwy jeśli to nie jest trening siłowy
+        if goal != schemas.TrainingGoal.strength:
+            if "90" in rest: rest = "60s"
+            elif "60" in rest: rest = "45s"
+    elif duration == schemas.WorkoutDuration.long:
+        if exercise.category == "Izolowane":
+            sets += 1 # Więcej pracy nad detalami przy długim treningu
+
+    return {"sets": sets, "reps": reps, "rest_time": rest}
+
+def calculate_suggested_nutrition(weight: float, height: float, goal: schemas.TrainingGoal, days_per_week: int) -> schemas.NutritionResponse:
+    # Uproszczony wzór BMR (średnia dla dorosłego, wiek ~30, neutralny płciowo)
+    bmr = (10 * weight) + (6.25 * height) - (5 * 30)
+    
+    # Mnożnik aktywności TDEE
+    if days_per_week <= 2:
+        multiplier = 1.3
+    elif days_per_week == 3:
+        multiplier = 1.5
+    else:
+        multiplier = 1.7
+        
+    tdee = bmr * multiplier
+    
+    # Dostosowanie do celu
+    if goal == schemas.TrainingGoal.reduction:
+        target_calories = tdee - 400
+    elif goal == schemas.TrainingGoal.hypertrophy:
+        target_calories = tdee + 300
+    else: # strength
+        target_calories = tdee + 100
+        
+    # Makroskładniki
+    protein_g = int(weight * 2.0)
+    fat_g = int(weight * 0.9)
+    # 1g B = 4 kcal, 1g T = 9 kcal, 1g W = 4 kcal
+    remaining_calories = target_calories - (protein_g * 4) - (fat_g * 9)
+    carbs_g = int(max(0, remaining_calories / 4))
+    
+    return schemas.NutritionResponse(
+        target_calories=int(target_calories),
+        protein_g=protein_g,
+        fat_g=fat_g,
+        carbs_g=carbs_g
+    )
 
 def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.PlanResponse:
     available_exercises = db.query(models.Exercise).filter(
@@ -62,6 +116,10 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
     elif request.experience_level == schemas.ExperienceLevel.advanced:
         volume_multiplier = 3
 
+    # Korekta ilości ćwiczeń pod kątem czasu trwania
+    if request.duration == schemas.WorkoutDuration.short:
+        volume_multiplier = max(1, volume_multiplier - 1)
+
     # Funkcja pomocnicza do wybierania ćwiczeń
     def pick_exercises(muscle: str, count: int, prefer_compound: bool = False) -> List[models.Exercise]:
         if muscle not in exercises_by_muscle or not exercises_by_muscle[muscle]:
@@ -92,16 +150,21 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
             # FBW - po 1-2 ćwiczenia na główną partię
             muscles_order = ["Nogi", "Plecy", "Klatka", "Barki", "Biceps", "Triceps", "Brzuch"]
             for group in muscles_order:
-                # Dla początkujących 1 ćwiczenie, dla zaawansowanych może być 2 dla dużych partii
-                ex_count = 1 if request.experience_level == schemas.ExperienceLevel.beginner else (2 if group in ["Nogi", "Plecy", "Klatka"] and volume_multiplier > 1 else 1)
-                prefer_comp = request.experience_level == schemas.ExperienceLevel.beginner
+                # Krótki trening: tylko po 1 ćwiczeniu na mniejsze partie
+                if request.duration == schemas.WorkoutDuration.short and group in ["Biceps", "Triceps", "Brzuch"]:
+                    ex_count = 1
+                else:
+                    ex_count = 1 if request.experience_level == schemas.ExperienceLevel.beginner else (2 if group in ["Nogi", "Plecy", "Klatka"] and volume_multiplier > 1 else 1)
+                
+                prefer_comp = request.experience_level == schemas.ExperienceLevel.beginner or request.duration == schemas.WorkoutDuration.short
                 
                 picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
                 for ex in picked:
-                    volume = assign_volume(ex, request.goal)
+                    volume = assign_volume(ex, request.goal, request.duration)
                     ex_resp = schemas.ExerciseResponse.model_validate(ex)
                     ex_resp.sets = volume["sets"]
                     ex_resp.reps = volume["reps"]
+                    ex_resp.rest_time = volume["rest_time"]
                     day_exercises.append(ex_resp)
             
             days_response.append(schemas.WorkoutDayResponse(day=day, focus="Full Body Workout", exercises=day_exercises))
@@ -123,10 +186,11 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                 
                 picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
                 for ex in picked:
-                    volume = assign_volume(ex, request.goal)
+                    volume = assign_volume(ex, request.goal, request.duration)
                     ex_resp = schemas.ExerciseResponse.model_validate(ex)
                     ex_resp.sets = volume["sets"]
                     ex_resp.reps = volume["reps"]
+                    ex_resp.rest_time = volume["rest_time"]
                     day_exercises.append(ex_resp)
                     
             days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
@@ -148,17 +212,30 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                 base_count = 3 if group in ["Klatka", "Plecy", "Nogi", "Barki"] else 2
                 # Skalujemy przez mnożnik zaawansowania (ale pilnujemy maksimum)
                 ex_count = min(base_count + (volume_multiplier - 1), 5) 
+                
+                if request.duration == schemas.WorkoutDuration.short:
+                    ex_count = max(2, ex_count - 1)
+
                 if split["name"] == "Full Body (Uzupełniający)":
                      ex_count = 1
                      
                 picked = pick_exercises(group, ex_count, prefer_compound=True)
                 for ex in picked:
-                    volume = assign_volume(ex, request.goal)
+                    volume = assign_volume(ex, request.goal, request.duration)
                     ex_resp = schemas.ExerciseResponse.model_validate(ex)
                     ex_resp.sets = volume["sets"]
                     ex_resp.reps = volume["reps"]
+                    ex_resp.rest_time = volume["rest_time"]
                     day_exercises.append(ex_resp)
                     
             days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
 
-    return schemas.PlanResponse(days=days_response)
+    # 4. Obliczanie sugestii dietetycznych
+    nutrition = calculate_suggested_nutrition(
+        request.weight, 
+        request.height, 
+        request.goal, 
+        request.days_per_week
+    )
+
+    return schemas.PlanResponse(days=days_response, nutrition=nutrition)
