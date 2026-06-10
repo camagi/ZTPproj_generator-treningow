@@ -146,26 +146,70 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
     if request.duration == schemas.WorkoutDuration.short:
         volume_multiplier = max(1, volume_multiplier - 1)
 
+    OPTIMAL_KEYWORDS = [
+        "barbell bench press", "barbell squat", "barbell deadlift", "pull-up", "push-up",
+        "military press", "shoulder press", "bent over row", "lat pulldown", "dips",
+        "lunge", "barbell curl", "triceps pushdown", "plank", "crunch", "leg press",
+        "dumbbell bench press", "lateral raise", "calf raise", "romanian deadlift",
+        "dumbbell curl", "leg extension", "leg curl", "dumbbell row"
+    ]
+
+    def score_exercise(ex: models.Exercise) -> int:
+        score = 0
+        name_low = ex.name.lower()
+        
+        if ex.category == "Złożone":
+            score += 20
+            
+        # Promuj "najlepsze" podstawowe ćwiczenia
+        for kw in OPTIMAL_KEYWORDS:
+            if kw in name_low:
+                score += 50
+                # Ścisłe dopasowanie dostaje jeszcze więcej punktów
+                if kw == name_low:
+                    score += 20
+                break
+                
+        # Deklasuj udziwnienia w generowaniu
+        if "smith machine" in name_low or "band" in name_low or "cable" in name_low or "stability ball" in name_low or "one-arm" in name_low or "single" in name_low or "seated" in name_low:
+            score -= 15
+            
+        # Niewielki element losowości, żeby plany nie były identyczne w 100% każdego dnia, ale w 90%
+        # Nie dajemy tu random, bo chcemy pełnej standaryzacji przy pierwszym generowaniu
+            
+        return score
+
+    # Zbiór ID ćwiczeń już użytych w całym planie
+    used_exercise_ids = set()
+
     # Funkcja pomocnicza do wybierania ćwiczeń
     def pick_exercises(muscle: str, count: int, prefer_compound: bool = False) -> List[models.Exercise]:
         if muscle not in exercises_by_muscle or not exercises_by_muscle[muscle]:
             return []
         
-        available = exercises_by_muscle[muscle]
+        available = exercises_by_muscle[muscle].copy()
+        
+        # Sortowanie: najpierw po ocenie (malejąco), potem odrzucamy użyte (na koniec listy)
+        available.sort(key=lambda ex: (0 if ex.id in used_exercise_ids else 1, score_exercise(ex)), reverse=True)
+        
         chosen = []
         
         if prefer_compound:
-            compounds = get_exercises_by_category(available, "Złożone")
+            compounds = [ex for ex in available if ex.category == "Złożone"]
             if compounds:
-                # Wybierz przynajmniej jedno złożone jeśli to możliwe
-                chosen.append(random.choice(compounds))
-                available = [ex for ex in available if ex not in chosen]
+                best_compound = compounds[0]
+                chosen.append(best_compound)
+                available.remove(best_compound)
+                used_exercise_ids.add(best_compound.id)
                 count -= 1
                 
         # Dobierz resztę
         num_to_choose = min(count, len(available))
         if num_to_choose > 0:
-            chosen.extend(random.sample(available, num_to_choose))
+            selected = available[:num_to_choose]
+            chosen.extend(selected)
+            for ex in selected:
+                used_exercise_ids.add(ex.id)
             
         return chosen
 
