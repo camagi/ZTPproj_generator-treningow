@@ -1,47 +1,225 @@
+import json
+import os
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, Base
 import models
+from gif_data import GIF_EXERCISES
+from translations_data import EXERCISE_NAMES_PL
+
+# Wczytaj cache tłumaczeń
+try:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(current_dir, "translation_cache.json"), 'r', encoding='utf-8') as f:
+        TRANSLATION_CACHE = json.load(f)
+except Exception as e:
+    print(f"Nie udało się załadować cache tłumaczeń: {e}")
+    TRANSLATION_CACHE = {}
+
+def get_pl_translation(text, default=""):
+    """Zwraca tłumaczenie z cache, lub wartość domyślną."""
+    if not text: return default
+    return TRANSLATION_CACHE.get(text, default)
 
 # Inicjalizacja bazy
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
-INITIAL_EXERCISES = [
-    {"name": "Wyciskanie sztangi na ławce poziomej", "muscle_group": "Klatka", "category": "Złożone"},
-    {"name": "Wyciskanie hantli na ławce skośnej dodatniej", "muscle_group": "Klatka", "category": "Złożone"},
-    {"name": "Rozpiętki z hantlami", "muscle_group": "Klatka", "category": "Izolowane"},
-    {"name": "Pompki na poręczach (Dipy)", "muscle_group": "Klatka", "category": "Złożone"},
-    {"name": "Martwy ciąg", "muscle_group": "Plecy", "category": "Złożone"},
-    {"name": "Podciąganie na drążku", "muscle_group": "Plecy", "category": "Złożone"},
-    {"name": "Wiosłowanie sztangą w opadzie tułowia", "muscle_group": "Plecy", "category": "Złożone"},
-    {"name": "Ściąganie drążka wyciągu górnego do klatki", "muscle_group": "Plecy", "category": "Izolowane"},
-    {"name": "Przysiady ze sztangą na karku", "muscle_group": "Nogi", "category": "Złożone"},
-    {"name": "Wykroki z hantlami", "muscle_group": "Nogi", "category": "Złożone"},
-    {"name": "Wyciskanie na suwnicy", "muscle_group": "Nogi", "category": "Złożone"},
-    {"name": "Wspięcia na palce", "muscle_group": "Nogi", "category": "Izolowane"},
-    {"name": "Wyciskanie żołnierskie sztangi", "muscle_group": "Barki", "category": "Złożone"},
-    {"name": "Wznosy ramion bokiem z hantlami", "muscle_group": "Barki", "category": "Izolowane"},
-    {"name": "Wyciskanie hantli siedząc", "muscle_group": "Barki", "category": "Złożone"},
-    {"name": "Uginanie przedramion ze sztangą", "muscle_group": "Biceps", "category": "Izolowane"},
-    {"name": "Uginanie przedramion z hantlami z supinacją", "muscle_group": "Biceps", "category": "Izolowane"},
-    {"name": "Wyciskanie francuskie sztangi leżąc", "muscle_group": "Triceps", "category": "Izolowane"},
-    {"name": "Prostowanie ramion na wyciągu górnym", "muscle_group": "Triceps", "category": "Izolowane"},
-    {"name": "Plank (deska)", "muscle_group": "Brzuch", "category": "Izolowane"},
-    {"name": "Allahy", "muscle_group": "Brzuch", "category": "Izolowane"},
-    {"name": "Wznosy nóg w zwisie", "muscle_group": "Brzuch", "category": "Izolowane"},
-]
+MUSCLE_MAPPING = {
+    "chest": "Klatka",
+    "pectorals": "Klatka",
+    "middle back": "Plecy",
+    "lats": "Plecy",
+    "lower back": "Plecy",
+    "traps": "Plecy",
+    "trapezius": "Plecy",
+    "upper back": "Plecy",
+    "spine": "Plecy",
+    "quadriceps": "Nogi",
+    "quads": "Nogi",
+    "hamstrings": "Nogi",
+    "glutes": "Nogi",
+    "calves": "Nogi",
+    "adductors": "Nogi",
+    "abductors": "Nogi",
+    "shoulders": "Barki",
+    "delts": "Barki",
+    "deltoids": "Barki",
+    "biceps": "Biceps",
+    "triceps": "Triceps",
+    "abdominals": "Brzuch",
+    "abs": "Brzuch",
+    "lower abs": "Brzuch",
+    "obliques": "Brzuch",
+    "forearms": "Biceps",
+    "brachialis": "Biceps",
+    "soleus": "Nogi",
+    "inner thighs": "Nogi",
+    "latissimus dorsi": "Plecy",
+    "rhomboids": "Plecy",
+    "upper chest": "Klatka",
+    "cardiovascular system": "Inne"
+}
+
+EQUIPMENT_MAPPING = {
+    "body only": "bodyweight",
+    "body weight": "bodyweight",
+    "dumbbell": "dumbbells",
+    "dumbbells": "dumbbells",
+    "bands": "bands",
+    "band": "bands",
+    "resistance band": "bands",
+    "barbell": "gym",
+    "olympic barbell": "gym",
+    "ez barbell": "gym",
+    "trap bar": "gym",
+    "machine": "gym",
+    "cable": "gym",
+    "kettlebells": "gym",
+    "kettlebell": "gym",
+    "smith machine": "gym",
+    "sled machine": "gym",
+    "leverage machine": "gym",
+    "weighted": "gym",
+    "assisted": "gym",
+    "stability ball": "gym",
+    "bosu ball": "gym",
+    "medicine ball": "gym",
+    "roller": "gym",
+    "wheel roller": "gym",
+    "stationary bike": "gym",
+    "elliptical machine": "gym",
+    "stepmill machine": "gym",
+}
 
 def seed():
     db = SessionLocal()
     try:
-        if db.query(models.Exercise).count() == 0:
-            print("Wypełnianie bazy danymi początkowymi...")
-            for ex_data in INITIAL_EXERCISES:
-                exercise = models.Exercise(**ex_data)
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        exercises_dir = os.path.join(parent_dir, "cwiczenia", "exercises")
+        
+        if not os.path.exists(exercises_dir):
+            print(f"Directory not found: {exercises_dir}")
+            return
+
+        print("Wypełnianie bazy danymi z plików JSON...")
+        count = 0
+        for filename in os.listdir(exercises_dir):
+            if filename.endswith(".json"):
+                file_path = os.path.join(exercises_dir, filename)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    try:
+                        data = json.load(f)
+                        
+                        name_en_raw = data.get("name", filename.replace(".json", "").replace("_", " "))
+                        name_en = " ".join([w.capitalize() for w in name_en_raw.split()])
+                        name_pl = EXERCISE_NAMES_PL.get(name_en, name_en)
+                        
+                        primary_muscle = data.get("primaryMuscles", [""])[0]
+                        muscle_group = MUSCLE_MAPPING.get(primary_muscle, "Inne")
+                        
+                        equipment_raw = data.get("equipment", "gym")
+                        if equipment_raw is None: equipment_raw = "body only"
+                        equipment = EQUIPMENT_MAPPING.get(equipment_raw, "gym")
+                        
+                        mechanic = data.get("mechanic")
+                        category = "Złożone" if mechanic == "compound" else "Izolowane"
+                        
+                        raw_instructions = data.get("instructions", [])
+                        concise_instructions = raw_instructions[:3]
+                        
+                        instructions = json.dumps(concise_instructions)
+                        
+                        # Tłumaczenie przez Google Translate z cache
+                        instructions_pl = []
+                        for i, instr in enumerate(concise_instructions):
+                            translated = get_pl_translation(instr, instr)
+                            instructions_pl.append(f"Krok {i+1}: {translated}")
+                        instructions_pl = json.dumps(instructions_pl)
+                        
+                        images = json.dumps([f"exercises/{img}" for img in data.get("images", [])])
+                        
+                        exercise = models.Exercise(
+                            name=name_en,
+                            name_pl=name_pl,
+                            muscle_group=muscle_group,
+                            category=category,
+                            equipment=equipment,
+                            description=raw_instructions[0] if raw_instructions else "",
+                            instructions=instructions,
+                            instructions_pl=instructions_pl,
+                            images=images
+                        )
+                        db.add(exercise)
+                        count += 1
+                    except Exception as e:
+                        print(f"Error loading {filename}: {e}")
+        
+        db.commit()
+        print(f"Dodano {count} ćwiczeń z plików JSON.")
+
+        # Dodawanie ćwiczeń z GIFami
+        print("Wypełnianie bazy danymi z GIFami (z gif_data.py)...")
+        gif_count = 0
+        for item in GIF_EXERCISES:
+            name_en_raw = item.get("name")
+            name_en = " ".join([w.capitalize() for w in name_en_raw.split()])
+            name_pl = EXERCISE_NAMES_PL.get(name_en, name_en)
+            
+            target_muscle = item.get("targetMuscles", [""])[0]
+            muscle_group = MUSCLE_MAPPING.get(target_muscle, "Inne")
+            
+            equip_raw = item.get("equipments", ["gym"])[0]
+            equipment = EQUIPMENT_MAPPING.get(equip_raw, "gym")
+            
+            category = "Izolowane"
+            if any(word in name_en.lower() for word in ["squat", "press", "deadlift", "row", "lunge"]):
+                category = "Złożone"
+            
+            raw_instructions = item.get("instructions", [])
+            concise_instructions = raw_instructions[:3]
+            instructions = json.dumps(concise_instructions)
+            
+            # Tłumaczenie przez Google Translate z cache
+            instructions_pl = []
+            for i, instr in enumerate(concise_instructions):
+                translated = get_pl_translation(instr, instr)
+                instructions_pl.append(f"Krok {i+1}: {translated}")
+            instructions_pl = json.dumps(instructions_pl)
+            
+            gif_url = f"gifs_720x720/{item.get('gifUrl')}"
+            
+            db.flush()
+            existing = db.query(models.Exercise).filter(models.Exercise.name == name_en).first()
+            
+            if existing:
+                existing.gif_url = gif_url
+                existing.name_pl = name_pl
+                existing.instructions_pl = instructions_pl
+                existing.muscle_group = muscle_group
+                existing.equipment = equipment
+                existing.category = category
+            else:
+                exercise = models.Exercise(
+                    name=name_en,
+                    name_pl=name_pl,
+                    muscle_group=muscle_group,
+                    category=category,
+                    equipment=equipment,
+                    description=raw_instructions[0] if raw_instructions else "",
+                    instructions=instructions,
+                    instructions_pl=instructions_pl,
+                    images=json.dumps([]),
+                    gif_url=gif_url
+                )
                 db.add(exercise)
-            db.commit()
-            print("Zakończono wypełnianie bazy.")
-        else:
-            print("Baza danych zawiera już ćwiczenia. Pomijam seedowanie.")
+                gif_count += 1
+        
+        db.commit()
+        print(f"Dodano {gif_count} nowych ćwiczeń z GIFami.")
+        count += gif_count
+        
+        print(f"Zakończono wypełnianie bazy. Łącznie: {count} ćwiczeń.")
     finally:
         db.close()
 
