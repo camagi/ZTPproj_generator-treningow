@@ -12,6 +12,11 @@ class WorkoutType(str, Enum):
     ppl = "PPL"
     split = "Split"
 
+class TrainingGoal(str, Enum):
+    reduction = "reduction"
+    hypertrophy = "hypertrophy"
+    strength = "strength"
+
 class ExerciseBase(BaseModel):
     name: str
     muscle_group: str
@@ -20,6 +25,8 @@ class ExerciseBase(BaseModel):
 
 class ExerciseResponse(ExerciseBase):
     id: int
+    sets: Optional[int] = None
+    reps: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -31,6 +38,7 @@ class PlanRequest(BaseModel):
     contraindicated_muscles: List[str] = []
     experience_level: ExperienceLevel = ExperienceLevel.intermediate
     workout_type: Optional[WorkoutType] = None
+    goal: TrainingGoal = TrainingGoal.hypertrophy
 
 class WorkoutDayResponse(BaseModel):
     day: int

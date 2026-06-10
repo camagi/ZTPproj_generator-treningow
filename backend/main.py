@@ -1,12 +1,15 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
-from database import get_db
+from database import get_db, engine
 import schemas
 import generator
 import models
 
 app = FastAPI(title="Workout Generator API")
+
+# Tworzenie tabel na starcie aplikacji
+models.Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,3 +30,7 @@ def get_all_exercises(db: Session = Depends(get_db)):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

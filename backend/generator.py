@@ -7,6 +7,23 @@ import schemas
 def get_exercises_by_category(exercises: List[models.Exercise], category: str) -> List[models.Exercise]:
     return [ex for ex in exercises if ex.category == category]
 
+def assign_volume(exercise: models.Exercise, goal: schemas.TrainingGoal) -> Dict[str, Any]:
+    if goal == schemas.TrainingGoal.strength:
+        if exercise.category == "Złożone":
+            return {"sets": 5, "reps": "5"}
+        else:
+            return {"sets": 3, "reps": "8-10"}
+    elif goal == schemas.TrainingGoal.reduction:
+        if exercise.category == "Złożone":
+            return {"sets": 3, "reps": "12-15"}
+        else:
+            return {"sets": 3, "reps": "15-20"}
+    else:  # hypertrophy
+        if exercise.category == "Złożone":
+            return {"sets": 4, "reps": "8-10"}
+        else:
+            return {"sets": 3, "reps": "10-12"}
+
 def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.PlanResponse:
     available_exercises = db.query(models.Exercise).filter(
         models.Exercise.muscle_group.notin_(request.contraindicated_muscles)
@@ -80,7 +97,11 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                 
                 picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
                 for ex in picked:
-                    day_exercises.append(schemas.ExerciseResponse.model_validate(ex))
+                    volume = assign_volume(ex, request.goal)
+                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
+                    ex_resp.sets = volume["sets"]
+                    ex_resp.reps = volume["reps"]
+                    day_exercises.append(ex_resp)
             
             days_response.append(schemas.WorkoutDayResponse(day=day, focus="Full Body Workout", exercises=day_exercises))
 
@@ -101,7 +122,11 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                 
                 picked = pick_exercises(group, ex_count, prefer_compound=prefer_comp)
                 for ex in picked:
-                    day_exercises.append(schemas.ExerciseResponse.model_validate(ex))
+                    volume = assign_volume(ex, request.goal)
+                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
+                    ex_resp.sets = volume["sets"]
+                    ex_resp.reps = volume["reps"]
+                    day_exercises.append(ex_resp)
                     
             days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
 
@@ -127,7 +152,11 @@ def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.
                      
                 picked = pick_exercises(group, ex_count, prefer_compound=True)
                 for ex in picked:
-                    day_exercises.append(schemas.ExerciseResponse.model_validate(ex))
+                    volume = assign_volume(ex, request.goal)
+                    ex_resp = schemas.ExerciseResponse.model_validate(ex)
+                    ex_resp.sets = volume["sets"]
+                    ex_resp.reps = volume["reps"]
+                    day_exercises.append(ex_resp)
                     
             days_response.append(schemas.WorkoutDayResponse(day=day, focus=split["name"], exercises=day_exercises))
 

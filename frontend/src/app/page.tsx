@@ -11,6 +11,8 @@ type Exercise = {
   muscle_group: string;
   category: string | null;
   description: string | null;
+  sets: number | null;
+  reps: string | null;
 };
 
 type WorkoutDay = {
@@ -43,6 +45,7 @@ export default function Home() {
       height: parseFloat(formData.get("height") as string),
       days_per_week: parseInt(formData.get("days") as string),
       experience_level: formData.get("experience_level") as string,
+      goal: formData.get("goal") as string,
       contraindicated_muscles,
     };
 
@@ -79,14 +82,14 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen p-8 sm:p-20 font-[family-name:var(--font-geist-sans)]">
+    <div className="min-h-screen p-8 sm:p-20 font-[family-name:var(--font-geist-sans)] bg-gray-50 text-gray-900">
       <main className="max-w-3xl mx-auto space-y-12">
         <header className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-blue-600">Generator Planów Treningowych</h1>
-          <p className="text-gray-600">Stwórz swój spersonalizowany plan treningowy dopasowany do Twojego poziomu i celów!</p>
+          <h1 className="text-4xl font-extrabold text-blue-600 tracking-tight">Generator Planów Treningowych</h1>
+          <p className="text-gray-600 max-w-xl mx-auto">Stwórz swój spersonalizowany plan treningowy dopasowany do Twojego poziomu i celów!</p>
         </header>
 
-        <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-100">
+        <section className="bg-white p-6 sm:p-8 rounded-2xl shadow-md border border-gray-100">
           <form onSubmit={handleSubmit} className="space-y-6">
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -106,31 +109,42 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <label htmlFor="experience_level" className="block font-semibold text-gray-700">Poziom zaawansowania:</label>
-                    <select id="experience_level" name="experience_level" required
+                    <select id="experience_level" name="experience_level" defaultValue="intermediate" required
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
                         <option value="beginner">Początkujący</option>
-                        <option value="intermediate" defaultValue="intermediate">Średniozaawansowany</option>
+                        <option value="intermediate">Średniozaawansowany</option>
                         <option value="advanced">Zaawansowany</option>
                     </select>
                 </div>
                 
                 <div className="space-y-2">
+                    <label htmlFor="goal" className="block font-semibold text-gray-700">Cel treningowy:</label>
+                    <select id="goal" name="goal" defaultValue="hypertrophy" required
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
+                        <option value="reduction">Redukcja (Utrata wagi)</option>
+                        <option value="hypertrophy">Hipertrofia (Budowa masy)</option>
+                        <option value="strength">Siła (Maksymalna siła)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
                     <label htmlFor="days" className="block font-semibold text-gray-700">Ilość dni w tygodniu (1-5):</label>
                     <input type="number" id="days" name="days" min="1" max="5" required placeholder="np. 3"
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" />
                 </div>
-            </div>
-            
-            <div className="space-y-2">
-                <label htmlFor="workout_type" className="block font-semibold text-gray-700">Preferowany typ treningu (opcjonalnie):</label>
-                <p className="text-sm text-gray-500">Zostaw "Automatyczny dobór", aby algorytm sam zdecydował na podstawie Twojego stażu i ilości dni.</p>
-                <select id="workout_type" name="workout_type"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
-                    <option value="auto">Automatyczny dobór</option>
-                    <option value="FBW">Full Body Workout (FBW)</option>
-                    <option value="PPL">Push / Pull / Legs</option>
-                    <option value="Split">Split (Partie rozdzielone)</option>
-                </select>
+
+                <div className="space-y-2">
+                    <label htmlFor="workout_type" className="block font-semibold text-gray-700">Preferowany typ treningu:</label>
+                    <select id="workout_type" name="workout_type" defaultValue="auto"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white">
+                        <option value="auto">Automatyczny dobór</option>
+                        <option value="FBW">Full Body Workout (FBW)</option>
+                        <option value="PPL">Push / Pull / Legs</option>
+                        <option value="Split">Split (Partie rozdzielone)</option>
+                    </select>
+                </div>
             </div>
 
             <div className="space-y-3 pt-2 border-t border-gray-100">
@@ -168,7 +182,7 @@ export default function Home() {
             ) : (
                 <div className="space-y-6">
                     {plan.days.map((day) => (
-                    <div key={day.day} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div key={day.day} className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
                         <div className="bg-blue-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                         <h3 className="text-xl font-bold text-blue-800">Dzień {day.day}</h3>
                         <span className="bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full">{day.focus}</span>
@@ -181,10 +195,22 @@ export default function Home() {
                             <ul className="space-y-3">
                             {day.exercises.map((ex, idx) => (
                                 <li key={ex.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all">
-                                <span className="font-semibold text-gray-800 mb-2 sm:mb-0">{ex.name}</span>
-                                <div className="flex gap-2 text-xs font-medium">
-                                    <span className="px-2.5 py-1 bg-gray-200 text-gray-700 rounded-md">{ex.muscle_group}</span>
-                                    {ex.category && <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md">{ex.category}</span>}
+                                <div className="flex flex-col">
+                                    <span className="font-semibold text-gray-800">{ex.name}</span>
+                                    <div className="flex gap-2 mt-1">
+                                        <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500">{ex.muscle_group}</span>
+                                        {ex.category && <span className="text-[10px] uppercase tracking-wider font-bold text-blue-500">{ex.category}</span>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4 mt-3 sm:mt-0">
+                                    <div className="text-center px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                        <span className="block text-[10px] text-gray-400 font-bold uppercase">Serie</span>
+                                        <span className="text-lg font-bold text-blue-600">{ex.sets}</span>
+                                    </div>
+                                    <div className="text-center px-3 py-1 bg-white border border-gray-200 rounded-lg shadow-sm">
+                                        <span className="block text-[10px] text-gray-400 font-bold uppercase">Powt.</span>
+                                        <span className="text-lg font-bold text-blue-600">{ex.reps}</span>
+                                    </div>
                                 </div>
                                 </li>
                             ))}
