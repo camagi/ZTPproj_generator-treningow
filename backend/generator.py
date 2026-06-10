@@ -78,6 +78,32 @@ def calculate_suggested_nutrition(weight: float, height: float, goal: schemas.Tr
         carbs_g=carbs_g
     )
 
+def get_alternative_exercise(db: Session, request: schemas.ReplaceExerciseRequest) -> models.Exercise:
+    # Szukamy ćwiczeń na tę samą partię, o tej samej kategorii i sprzęcie, ale o innym ID
+    query = db.query(models.Exercise).filter(
+        models.Exercise.muscle_group == request.muscle_group,
+        models.Exercise.equipment == request.equipment,
+        models.Exercise.id != request.current_exercise_id
+    )
+    
+    if request.category:
+        query = query.filter(models.Exercise.category == request.category)
+        
+    alternatives = query.all()
+    
+    if not alternatives:
+        # Jeśli nie ma alternatywy w tej samej kategorii, spróbuj bez filtra kategorii
+        alternatives = db.query(models.Exercise).filter(
+            models.Exercise.muscle_group == request.muscle_group,
+            models.Exercise.equipment == request.equipment,
+            models.Exercise.id != request.current_exercise_id
+        ).all()
+        
+    if not alternatives:
+        return None
+        
+    return random.choice(alternatives)
+
 def generate_workout_plan(db: Session, request: schemas.PlanRequest) -> schemas.PlanResponse:
     available_exercises = db.query(models.Exercise).filter(
         models.Exercise.muscle_group.notin_(request.contraindicated_muscles),

@@ -61,6 +61,12 @@ class NutritionResponse(BaseModel):
     fat_g: int
     carbs_g: int
 
+class ReplaceExerciseRequest(BaseModel):
+    current_exercise_id: int
+    muscle_group: str
+    category: Optional[str] = None
+    equipment: str
+
 class WorkoutDayResponse(BaseModel):
     day: int
     focus: str

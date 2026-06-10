@@ -36,6 +36,50 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [replacingId, setReplacingId] = useState<number | null>(null);
+
+  async function handleReplaceExercise(dayIdx: number, exIdx: number, exercise: Exercise, equipment: string) {
+    if (replacingId !== null) return;
+    setReplacingId(exercise.id);
+
+    try {
+      const res = await fetch(`${API_URL}/exercises/replace`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          current_exercise_id: exercise.id,
+          muscle_group: exercise.muscle_group,
+          category: exercise.category,
+          equipment: equipment,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Błąd podczas wymiany ćwiczenia.");
+
+      const newEx = await res.json();
+      
+      // Zachowaj parametry (serie, powtórzenia, przerwa) ze starego ćwiczenia
+      const updatedEx = {
+        ...newEx,
+        sets: exercise.sets,
+        reps: exercise.reps,
+        rest_time: exercise.rest_time
+      };
+
+      setPlan((prev) => {
+        if (!prev) return prev;
+        const newDays = [...prev.days];
+        newDays[dayIdx].exercises[exIdx] = updatedEx;
+        return { ...prev, days: newDays };
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert("Nie znaleziono alternatywnego ćwiczenia o podobnym wzorcu.");
+    } finally {
+      setReplacingId(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -262,9 +306,22 @@ export default function Home() {
                         ) : (
                             <ul className="space-y-3">
                             {day.exercises.map((ex, idx) => (
-                                <li key={ex.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all">
-                                <div className="flex flex-col">
-                                    <span className="font-semibold text-gray-800">{ex.name}</span>
+                                <li key={ex.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all group">
+                                <div className="flex flex-col flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-gray-800">{ex.name}</span>
+                                        <button 
+                                            onClick={() => {
+                                                const equipment = (new FormData(document.querySelector('form')!)).get('equipment') as string;
+                                                handleReplaceExercise(plan.days.indexOf(day), idx, ex, equipment);
+                                            }}
+                                            disabled={replacingId === ex.id}
+                                            title="Wymień na inne"
+                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-bold flex items-center gap-1"
+                                        >
+                                            {replacingId === ex.id ? "⌛" : "🔄 Wymień"}
+                                        </button>
+                                    </div>
                                     <div className="flex gap-2 mt-1">
                                         <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500">{ex.muscle_group}</span>
                                         {ex.category && <span className="text-[10px] uppercase tracking-wider font-bold text-blue-500">{ex.category}</span>}

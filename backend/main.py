@@ -27,6 +27,14 @@ def create_plan(request: schemas.PlanRequest, db: Session = Depends(get_db)):
 def get_all_exercises(db: Session = Depends(get_db)):
     return db.query(models.Exercise).all()
 
+@app.post("/api/exercises/replace", response_model=schemas.ExerciseResponse)
+def replace_exercise(request: schemas.ReplaceExerciseRequest, db: Session = Depends(get_db)):
+    alternative = generator.get_alternative_exercise(db, request)
+    if not alternative:
+        # Jeśli nie znaleziono żadnej alternatywy, zwróć błąd lub to samo ćwiczenie
+        return db.query(models.Exercise).filter(models.Exercise.id == request.current_exercise_id).first()
+    return alternative
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
