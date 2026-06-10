@@ -1,12 +1,23 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 from database import get_db, engine
 import schemas
 import generator
 import models
 
 app = FastAPI(title="Workout Generator API")
+
+# Mount static files for exercise images/gifs
+# Assumes 'cwiczenia' directory is in the root of the project
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+cwiczenia_path = os.path.join(parent_dir, "cwiczenia")
+
+if os.path.exists(cwiczenia_path):
+    app.mount("/exercises-static", StaticFiles(directory=cwiczenia_path), name="exercises-static")
 
 # Tworzenie tabel na starcie aplikacji
 models.Base.metadata.create_all(bind=engine)

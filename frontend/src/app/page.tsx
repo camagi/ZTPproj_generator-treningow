@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const API_URL = "http://127.0.0.1:8000/api";
+const STATIC_URL = "http://127.0.0.1:8000/exercises-static";
 const MUSCLES = ["Klatka", "Plecy", "Nogi", "Barki", "Biceps", "Triceps", "Brzuch"];
 
 type Exercise = {
@@ -14,29 +15,58 @@ type Exercise = {
   sets: number | null;
   reps: string | null;
   rest_time: string | null;
+  images?: string[];
+  instructions?: string[];
 };
 
-type WorkoutDay = {
-  day: number;
-  focus: string;
-  exercises: Exercise[];
-};
+function ExerciseMedia({ images, name }: { images: string[], name: string }) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  
+  useEffect(() => {
+    if (!images || images.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % images.length);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [images]);
 
-type PlanResponse = {
-  days: WorkoutDay[];
-  nutrition: {
-    target_calories: number;
-    protein_g: number;
-    fat_g: number;
-    carbs_g: number;
-  } | null;
-};
+  if (!images || images.length === 0) return (
+    <div className="w-full h-48 bg-gray-100 flex items-center justify-center rounded-xl border border-dashed border-gray-300">
+        <span className="text-gray-400 text-xs italic">Brak podglądu</span>
+    </div>
+  );
+
+  return (
+    <div className="relative w-full h-48 bg-white rounded-xl overflow-hidden border border-gray-200 shadow-inner group-hover:border-blue-300 transition-colors">
+      <img 
+        src={`${STATIC_URL}/${images[currentIdx]}`} 
+        alt={name} 
+        className="w-full h-full object-contain p-2"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x400?text=Podgląd+niedostępny";
+        }}
+      />
+      {images.length > 1 && (
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          {images.map((_, i) => (
+            <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === currentIdx ? 'bg-blue-600 w-3' : 'bg-gray-300'}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replacingId, setReplacingId] = useState<number | null>(null);
+  const [showMedia, setShowMedia] = useState<Record<number, boolean>>({});
+
+  const toggleMedia = (id: number) => {
+    setShowMedia(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   async function handleReplaceExercise(dayIdx: number, exIdx: number, exercise: Exercise, equipment: string) {
     if (replacingId !== null) return;
@@ -306,21 +336,30 @@ export default function Home() {
                         ) : (
                             <ul className="space-y-3">
                             {day.exercises.map((ex, idx) => (
-                                <li key={ex.id || idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all group">
+                                <li key={ex.id || idx} className="flex flex-col p-4 rounded-xl bg-gray-50 border border-gray-100 hover:border-blue-200 hover:shadow-sm transition-all group">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between">
                                 <div className="flex flex-col flex-1">
                                     <div className="flex items-center gap-2">
                                         <span className="font-semibold text-gray-800">{ex.name}</span>
-                                        <button 
-                                            onClick={() => {
-                                                const equipment = (new FormData(document.querySelector('form')!)).get('equipment') as string;
-                                                handleReplaceExercise(plan.days.indexOf(day), idx, ex, equipment);
-                                            }}
-                                            disabled={replacingId === ex.id}
-                                            title="Wymień na inne"
-                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-bold flex items-center gap-1"
-                                        >
-                                            {replacingId === ex.id ? "⌛" : "🔄 Wymień"}
-                                        </button>
+                                        <div className="flex gap-1">
+                                            <button 
+                                                onClick={() => {
+                                                    const equipment = (new FormData(document.querySelector('form')!)).get('equipment') as string;
+                                                    handleReplaceExercise(plan.days.indexOf(day), idx, ex, equipment);
+                                                }}
+                                                disabled={replacingId === ex.id}
+                                                title="Wymień na inne"
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg text-xs font-bold flex items-center gap-1"
+                                            >
+                                                {replacingId === ex.id ? "⌛" : "🔄 Wymień"}
+                                            </button>
+                                            <button 
+                                                onClick={() => toggleMedia(ex.id)}
+                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-green-100 text-green-600 rounded-lg text-xs font-bold flex items-center gap-1"
+                                            >
+                                                {showMedia[ex.id] ? "👁️ Ukryj" : "👁️ Pokaż"}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="flex gap-2 mt-1">
                                         <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500">{ex.muscle_group}</span>
@@ -341,6 +380,26 @@ export default function Home() {
                                         <span className="text-lg font-bold text-blue-600">{ex.rest_time}</span>
                                     </div>
                                 </div>
+                                </div>
+                                
+                                {showMedia[ex.id] && (
+                                    <div className="mt-4 pt-4 border-t border-gray-200 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <ExerciseMedia images={ex.images || []} name={ex.name} />
+                                            <div className="space-y-2">
+                                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Instrukcja</h4>
+                                                <ul className="text-sm text-gray-600 space-y-1.5 list-disc list-inside">
+                                                    {(ex.instructions || []).map((step, i) => (
+                                                        <li key={i} className="leading-relaxed">{step}</li>
+                                                    ))}
+                                                    {(!ex.instructions || ex.instructions.length === 0) && (
+                                                        <li className="italic text-gray-400">Brak szczegółowych instrukcji.</li>
+                                                    )}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 </li>
                             ))}
                             </ul>

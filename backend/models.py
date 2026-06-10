@@ -10,3 +10,6 @@ class Exercise(Base):
     category = Column(String, index=True) # np. Złożone, Izolowane
     equipment = Column(String, index=True, default="gym") # np. gym, dumbbells, bodyweight, bands
     description = Column(Text, nullable=True)
+    images = Column(Text, nullable=True) # JSON string or comma-separated paths
+    instructions = Column(Text, nullable=True)
+

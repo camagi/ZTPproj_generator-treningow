@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+import json
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
 from enum import Enum
 
@@ -34,6 +35,18 @@ class ExerciseBase(BaseModel):
     category: Optional[str] = None
     equipment: Optional[str] = "gym"
     description: Optional[str] = None
+    images: Optional[List[str]] = []
+    instructions: Optional[List[str]] = []
+
+    @field_validator('images', 'instructions', mode='before')
+    @classmethod
+    def parse_json_string(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except:
+                return []
+        return v
 
 class ExerciseResponse(ExerciseBase):
     id: int
