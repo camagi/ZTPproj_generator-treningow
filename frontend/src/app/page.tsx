@@ -3,8 +3,8 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState, useEffect } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
-const STATIC_URL = process.env.NEXT_PUBLIC_STATIC_URL ?? "/exercises-static";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://ztpproj-generator-treningow.onrender.com/api";
+const STATIC_URL = process.env.NEXT_PUBLIC_STATIC_URL ?? "https://ztpproj-generator-treningow.onrender.com/exercises-static";
 const MUSCLES = ["Klatka", "Plecy", "Nogi", "Barki", "Biceps", "Triceps", "Brzuch"];
 type Lang = "pl" | "en";
 
