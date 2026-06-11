@@ -159,6 +159,7 @@ const SUB_MUSCLE_MAP: Record<string, {pl: string, en: string}> = {
 
 type Exercise = {
   id: number;
+  instance_key?: string;
   name: string;
   name_pl: string;
   muscle_group: string;
@@ -185,6 +186,7 @@ type WorkoutDayResponse = {
   day: number;
   focus: string;
   exercises: Exercise[];
+  warmup: Exercise[];
 };
 
 type PlanResponse = {
@@ -253,14 +255,14 @@ export default function Home() {
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replacingId, setReplacingId] = useState<number | null>(null);
-  const [showMedia, setShowMedia] = useState<Record<number, boolean>>({});
+  const [showMedia, setShowMedia] = useState<Record<string, boolean>>({});
 
   const toggleLang = () => {
     setLang(prev => prev === 'pl' ? 'en' : 'pl');
   };
 
-  const toggleMedia = (id: number) => {
-    setShowMedia(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleMedia = (key: string) => {
+    setShowMedia(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   async function handleReplaceExercise(dayIdx: number, exIdx: number, exercise: Exercise, equipment: string) {
@@ -285,6 +287,7 @@ export default function Home() {
       
       const updatedEx = {
         ...newEx,
+        instance_key: exercise.instance_key,
         sets: exercise.sets,
         reps: exercise.reps,
         rest_time: exercise.rest_time
@@ -341,6 +344,21 @@ export default function Home() {
       if (!res.ok) throw new Error("API Error");
 
       const data = await res.json();
+
+      if (data.days) {
+        data.days = data.days.map((day: any, dIdx: number) => ({
+          ...day,
+          exercises: day.exercises.map((ex: any, eIdx: number) => ({
+            ...ex,
+            instance_key: `day-${dIdx}-ex-${eIdx}-${ex.id}`
+          })),
+          warmup: (day.warmup || []).map((ex: any, eIdx: number) => ({
+            ...ex,
+            instance_key: `day-${dIdx}-warmup-${eIdx}-${ex.id}`
+          }))
+        }));
+      }
+
       setPlan(data);
       
       setTimeout(() => {
@@ -419,6 +437,20 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{t.workout_type}</label>
+                <div className="relative">
+                  <select name="workout_type" defaultValue="auto"
+                      className="w-full p-6 sm:p-8 bg-white/5 border border-white/5 rounded-[24px] sm:rounded-[32px] text-white text-xl sm:text-2xl font-black focus:bg-white/10 outline-none transition-all appearance-none cursor-pointer shadow-2xl">
+                      <option value="auto" className="bg-[#131B2B]">{t.auto}</option>
+                      <option value="FBW" className="bg-[#131B2B]">FBW (Full Body)</option>
+                      <option value="PPL" className="bg-[#131B2B]">PPL (Push Pull Legs)</option>
+                      <option value="Split" className="bg-[#131B2B]">SPLIT (Body Part)</option>
+                  </select>
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">▼</div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
               {[ {n:'equipment', t:t.equipment, d:'gym', opts:[{v:'gym', l:t.gym},{v:'dumbbells', l:t.dumbbells},{v:'bodyweight', l:t.bodyweight},{v:'bands', l:t.bands}]},
                  {n:'duration', t:t.duration, d:'medium', opts:[{v:'short', l:t.short},{v:'medium', l:t.medium},{v:'long', l:t.long}]},
@@ -439,18 +471,31 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="space-y-4 pt-8 border-t border-white/5">
-              <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{t.blocked_parts}</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {MUSCLES.map(m => (
-                  <label key={m} className="relative flex items-center justify-center p-5 bg-white/5 border border-white/5 rounded-[24px] cursor-pointer hover:bg-white/10 transition-all active:scale-95 group overflow-hidden">
-                    <input type="checkbox" name="contraindicated_muscles" value={m} className="peer hidden" />
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-red-600 opacity-0 peer-checked:opacity-20 transition-opacity"></div>
-                    <span className="relative z-10 text-[11px] font-black text-gray-500 peer-checked:text-white transition-colors tracking-widest uppercase text-center leading-tight">
-                      {MUSCLE_GROUPS_MAP[m]?.[lang] || m}
-                    </span>
+            <div className="space-y-6 pt-6 border-t border-white/5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 ml-1">
+                  <div>
+                    <label className="block font-black text-gray-200 text-2xl tracking-tight">{t.include_warmup}</label>
+                    <p className="text-gray-400 mt-1">{t.warmup_desc}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" name="include_warmup" className="sr-only peer" defaultChecked />
+                    <div className="w-14 h-8 bg-white/5 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600 transition-colors border border-white/10 shadow-lg"></div>
                   </label>
-                ))}
+              </div>
+
+              <div className="pt-6">
+                <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{t.blocked_parts}</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+                  {MUSCLES.map(m => (
+                    <label key={m} className="relative flex items-center justify-center p-5 bg-white/5 border border-white/5 rounded-[28px] cursor-pointer hover:bg-white/10 transition-all active:scale-95 group overflow-hidden">
+                      <input type="checkbox" name="contraindicated_muscles" value={m} className="peer hidden" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-red-600 opacity-0 peer-checked:opacity-20 transition-opacity"></div>
+                      <span className="relative z-10 text-[11px] font-black text-gray-500 peer-checked:text-white transition-colors tracking-widest uppercase text-center leading-tight">
+                        {MUSCLE_GROUPS_MAP[m]?.[lang] || m}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -520,9 +565,9 @@ export default function Home() {
                         <h3 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase">{t.day} {day.day}</h3>
                         <span className="text-orange-500 font-black uppercase tracking-[0.3em] sm:tracking-[0.5em] text-xs sm:text-sm mt-2 block leading-relaxed">{day.focus}</span>
                       </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
                       {/* Warm-up Section */}
                       {day.warmup && day.warmup.length > 0 && (
                         <div className="col-span-full space-y-8">
@@ -534,10 +579,10 @@ export default function Home() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             {day.warmup.map((ex, w_idx) => (
                               <button 
-                                key={`warmup-${ex.id}-${w_idx}`}
-                                onClick={() => toggleMedia(ex.id)}
+                                key={ex.instance_key}
+                                onClick={() => toggleMedia(ex.instance_key!)}
                                 className={`group relative w-full text-left p-6 rounded-[32px] border transition-all duration-500 backdrop-blur-3xl overflow-hidden active:scale-[0.98] ${
-                                  showMedia[ex.id] 
+                                  showMedia[ex.instance_key!] 
                                   ? 'bg-orange-500/10 border-orange-500/30 ring-1 ring-orange-500/20' 
                                   : 'bg-white/[0.02] border-white/5 hover:border-white/10 shadow-lg'
                                 }`}
@@ -548,7 +593,7 @@ export default function Home() {
                                       {lang === 'pl' ? ex.name_pl : ex.name}
                                     </h4>
                                     <div className="p-2 bg-white/5 rounded-xl group-hover:bg-orange-500/10 transition-all text-gray-700">
-                                      {showMedia[ex.id] ? (
+                                      {showMedia[ex.instance_key!] ? (
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
                                       ) : (
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -560,7 +605,7 @@ export default function Home() {
                                     <span className="text-orange-500/80">{ex.reps} {t.reps}</span>
                                   </div>
                                 </div>
-                                {showMedia[ex.id] && (
+                                {showMedia[ex.instance_key!] && (
                                   <div className="mt-6 pt-6 border-t border-white/10 animate-in fade-in slide-in-from-top-4 duration-500">
                                      <div className="bg-white rounded-2xl p-1 mb-4 shadow-xl">
                                         <ExerciseMedia images={ex.images || []} gif_url={ex.gif_url} name={ex.name} />
@@ -576,11 +621,11 @@ export default function Home() {
 
                       {/* Main Exercises Section */}
                       {day.exercises.map((ex, idx) => (
-                        <div key={`main-${ex.id}-${idx}`} className="flex flex-col px-1">
+                        <div key={ex.instance_key} className="flex flex-col px-1">
                           <button 
-                            onClick={() => toggleMedia(ex.id)}
+                            onClick={() => toggleMedia(ex.instance_key!)}
                             className={`group relative w-full text-left p-8 sm:p-12 rounded-[40px] sm:rounded-[50px] border transition-all duration-700 backdrop-blur-3xl overflow-hidden active:scale-[0.98] ${
-                              showMedia[ex.id] 
+                              showMedia[ex.instance_key!] 
                               ? 'bg-white/10 border-white/30 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] ring-2 ring-orange-500/50' 
                               : 'bg-white/[0.04] border-white/5 hover:bg-white/[0.08] hover:border-white/20 shadow-2xl'
                             }`}
@@ -593,7 +638,7 @@ export default function Home() {
                                   {lang === 'pl' ? ex.name_pl : ex.name}
                                 </h4>
                                 <div className="mt-1 shrink-0 p-3 sm:p-4 bg-white/5 rounded-2xl sm:rounded-3xl group-hover:bg-orange-500/20 group-hover:text-orange-400 transition-all text-gray-600 border border-white/5">
-                                  {showMedia[ex.id] ? (
+                                  {showMedia[ex.instance_key!] ? (
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="sm:w-8 sm:h-8"><path d="m18 15-6-6-6 6"/></svg>
                                   ) : (
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="sm:w-8 sm:h-8"><path d="m6 9 6 6 6-6"/></svg>
@@ -642,7 +687,7 @@ export default function Home() {
                             </button>
                           </div>
 
-                          {showMedia[ex.id] && (
+                          {showMedia[ex.instance_key!] && (
                             <div className="mt-12 sm:mt-16 px-2 sm:px-6 animate-in fade-in slide-in-from-top-12 duration-1000 space-y-12 sm:space-y-16">
                               <div className="bg-white rounded-[40px] sm:rounded-[60px] p-2 sm:p-3 shadow-[0_100px_150px_-30px_rgba(0,0,0,0.8)] border-4 sm:border-8 border-white/5">
                                 <ExerciseMedia images={ex.images || []} gif_url={ex.gif_url} name={ex.name} />
