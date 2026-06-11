@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, Base
@@ -75,10 +75,6 @@ def determine_sub_muscle(name_en, muscle_group, original_primary):
     
     return None
 
-# Inicjalizacja bazy
-Base.metadata.drop_all(bind=engine)
-Base.metadata.create_all(bind=engine)
-
 MUSCLE_MAPPING = {
     "chest": "Klatka",
     "pectorals": "Klatka",
@@ -146,8 +142,39 @@ EQUIPMENT_MAPPING = {
     "stepmill machine": "gym",
 }
 
-def seed():
+def upsert_exercise(db: Session, exercise: models.Exercise) -> bool:
+    existing = db.query(models.Exercise).filter(models.Exercise.name == exercise.name).first()
+    if not existing:
+        db.add(exercise)
+        return True
+
+    for field in [
+        "name_pl",
+        "muscle_group",
+        "sub_muscle",
+        "category",
+        "equipment",
+        "description",
+        "images",
+        "gif_url",
+        "instructions",
+        "instructions_pl",
+        "is_warmup",
+    ]:
+        setattr(existing, field, getattr(exercise, field))
+    return False
+
+
+def seed(reset: bool = False, skip_if_populated: bool = False):
+    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    if reset:
+        db.query(models.Exercise).delete()
+        db.commit()
+    elif skip_if_populated and db.query(models.Exercise.id).first():
+        print("Baza zawiera już ćwiczenia. Pomijam seed.")
+        db.close()
+        return
     
     # Ćwiczenia całkowicie usuwane (strongman, niebezpieczne, dziwne)
     BANNED_KEYWORDS = [
@@ -170,10 +197,14 @@ def seed():
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(current_dir)
-        exercises_dir = os.path.join(parent_dir, "cwiczenia", "exercises")
+        candidate_dirs = [
+            os.path.join(parent_dir, "cwiczenia", "exercises"),
+            os.path.join(current_dir, "cwiczenia", "exercises"),
+        ]
+        exercises_dir = next((path for path in candidate_dirs if os.path.exists(path)), None)
         
-        if not os.path.exists(exercises_dir):
-            print(f"Directory not found: {exercises_dir}")
+        if not exercises_dir:
+            print(f"Exercises directory not found. Checked: {candidate_dirs}")
             return
 
         print("Wypełnianie bazy danymi z plików JSON...")
@@ -250,8 +281,8 @@ def seed():
                             images=images,
                             is_warmup=is_warmup
                         )
-                        db.add(exercise)
-                        count += 1
+                        if upsert_exercise(db, exercise):
+                            count += 1
                     except Exception as e:
                         print(f"Error loading {filename}: {e}")
         
@@ -339,4 +370,11 @@ def seed():
         db.close()
 
 if __name__ == "__main__":
-    seed()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seed workout exercises database.")
+    parser.add_argument("--reset", action="store_true", help="Delete existing exercises before seeding.")
+    parser.add_argument("--skip-if-populated", action="store_true", help="Do nothing when exercises already exist.")
+    args = parser.parse_args()
+
+    seed(reset=args.reset, skip_if_populated=args.skip_if_populated)

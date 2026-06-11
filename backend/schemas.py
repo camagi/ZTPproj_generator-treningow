@@ -1,5 +1,5 @@
-import json
-from pydantic import BaseModel, Field, field_validator
+﻿import json
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import List, Optional
 from enum import Enum
 
@@ -59,9 +59,7 @@ class ExerciseResponse(ExerciseBase):
     reps: Optional[str] = None
     rest_time: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 class PlanRequest(BaseModel):
     weight: float = Field(..., ge=30, le=300)
     height: float = Field(..., ge=100, le=250)

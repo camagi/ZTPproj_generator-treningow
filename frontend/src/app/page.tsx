@@ -1,307 +1,18 @@
-"use client";
+﻿"use client";
 
-/* eslint-disable @next/next/no-img-element */
-import { useState, useEffect } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://ztpproj-generator-treningow.onrender.com/api";
-const STATIC_URL = process.env.NEXT_PUBLIC_STATIC_URL ?? "https://ztpproj-generator-treningow.onrender.com/exercises-static";
-const MUSCLES = ["Klatka", "Plecy", "Nogi", "Barki", "Biceps", "Triceps", "Brzuch"];
-type Lang = "pl" | "en";
-
-const TRANSLATIONS = {
-  pl: {
-    title: "Workout Designer",
-    weight: "Waga (kg)",
-    height: "Wzrost (cm)",
-    days: "Dni w tygodniu",
-    experience: "Poziom zaawansowania",
-    goal: "Cel treningowy",
-    equipment: "Dostępny sprzęt",
-    duration: "Czas trwania",
-    generate: "Generuj Plan",
-    generating: "Tworzenie...",
-    beginner: "Początkujący",
-    intermediate: "Średniozaawansowany",
-    advanced: "Zaawansowany",
-    reduction: "Redukcja",
-    hypertrophy: "Hipertrofia",
-    strength: "Siła",
-    gym: "Siłownia",
-    dumbbells: "Hantle",
-    bodyweight: "Masa ciała",
-    bands: "Gumy",
-    short: "Krótki (45 min)",
-    medium: "Średni (60 min)",
-    long: "Długi (90 min)",
-    auto: "Automatyczny",
-    replace: "Wymień",
-    show: "Pokaż",
-    hide: "Ukryj",
-    instructions: "Instrukcja",
-    no_instructions: "Brak szczegółowych instrukcji.",
-    sets: "Serie",
-    reps: "Powt.",
-    rest: "Przerwa",
-    nutrition: "Makroskładniki",
-    calories: "Kalorie",
-    protein: "Białko",
-    fat: "Tłuszcz",
-    carbs: "Węglowodany",
-    day: "Dzień",
-    workout_type: "Typ treningu",
-    blocked_parts: "Zablokowane partie",
-    blocked_desc: "Zaznacz partie, których nie możesz trenować.",
-    personalization: "Twój Plan",
-    workout_plan: "Harmonogram Treningowy",
-    no_results: "Brak wyników dla podanych parametrów.",
-    no_exercises_day: "Brak ćwiczeń.",
-    nutrition_desc: "Wartości obliczone dla przeciętnej osoby dorosłej na podstawie Twoich danych.",
-    approx_values: "Szacunkowe",
-    include_warmup: "Dodaj rozgrzewkę",
-    warmup_desc: "Osobna sekcja z ćwiczeniami mobilizacyjnymi przed treningiem.",
-  },
-  en: {
-    title: "Workout Designer",
-    weight: "Weight (kg)",
-    height: "Height (cm)",
-    days: "Days per week",
-    experience: "Level",
-    goal: "Goal",
-    equipment: "Equipment",
-    duration: "Duration",
-    generate: "Generate Plan",
-    generating: "Creating...",
-    beginner: "Beginner",
-    intermediate: "Intermediate",
-    advanced: "Advanced",
-    reduction: "Reduction",
-    hypertrophy: "Hypertrophy",
-    strength: "Strength",
-    gym: "Gym",
-    dumbbells: "Dumbbells",
-    bodyweight: "Bodyweight",
-    bands: "Bands",
-    short: "Short (45 min)",
-    medium: "Medium (60 min)",
-    long: "Long (90 min)",
-    auto: "Automatic",
-    replace: "Replace",
-    show: "Show",
-    hide: "Hide",
-    instructions: "Instructions",
-    no_instructions: "No instructions available.",
-    sets: "Sets",
-    reps: "Reps",
-    rest: "Rest",
-    nutrition: "Nutrition",
-    calories: "Calories",
-    protein: "Protein",
-    fat: "Fat",
-    carbs: "Carbs",
-    day: "Day",
-    workout_type: "Workout Type",
-    blocked_parts: "Blocked parts",
-    blocked_desc: "Select parts you cannot train.",
-    personalization: "Your Plan",
-    workout_plan: "Workout Schedule",
-    no_results: "No results for given parameters.",
-    no_exercises_day: "No exercises.",
-    nutrition_desc: "Calculated based on your input for an average adult.",
-    approx_values: "Approximate",
-    include_warmup: "Add warm-up",
-    warmup_desc: "A separate section with mobility exercises before workout.",
-  }
-};
-
-const MUSCLE_GROUPS_MAP: Record<string, { pl: string, en: string }> = {
-  "Klatka": { pl: "Klatka", en: "Chest" },
-  "Plecy": { pl: "Plecy", en: "Back" },
-  "Nogi": { pl: "Nogi", en: "Legs" },
-  "Barki": { pl: "Barki", en: "Shoulders" },
-  "Biceps": { pl: "Biceps", en: "Biceps" },
-  "Triceps": { pl: "Triceps", en: "Triceps" },
-  "Brzuch": { pl: "Brzuch", en: "Abs" },
-  "Inne": { pl: "Inne", en: "Other" }
-};
-
-const SUB_MUSCLE_MAP: Record<string, {pl: string, en: string}> = {
-    "Góra klatki": { pl: "Góra klatki", en: "Upper Chest" },
-    "Dół klatki": { pl: "Dół klatki", en: "Lower Chest" },
-    "Środek klatki": { pl: "Środek klatki", en: "Middle Chest" },
-    "Szerokość pleców": { pl: "Szerokość pleców", en: "Lats / Back Width" },
-    "Grubość i górny grzbiet": { pl: "Grubość i górny grzbiet", en: "Upper Back & Thickness" },
-    "Dół pleców": { pl: "Dół pleców", en: "Lower Back" },
-    "Przód uda": { pl: "Przód uda", en: "Quads" },
-    "Tył uda": { pl: "Tył uda", en: "Hamstrings" },
-    "Pośladki": { pl: "Pośladki", en: "Glutes" },
-    "Łydki - górna część": { pl: "Łydki - górna", en: "Upper Calves" },
-    "Łydki - dolna część": { pl: "Łydki - dolna", en: "Lower Calves" },
-    "Wewnętrzna strona ud": { pl: "Wewnętrzna strona ud", en: "Inner Thighs" },
-    "Zewnętrzna strona ud": { pl: "Zewnętrzna strona ud", en: "Outer Thighs" },
-    "Przedni akton": { pl: "Przód barku", en: "Front Delts" },
-    "Boczny akton": { pl: "Bok barku", en: "Side Delts" },
-    "Tylny akton": { pl: "Tył barku", en: "Rear Delts" },
-    "Biceps - głowa długa": { pl: "Biceps (gł. długa)", en: "Biceps (Long Head)" },
-    "Biceps - głowa krótka": { pl: "Biceps (gł. krótka)", en: "Biceps (Short Head)" },
-    "Triceps - głowa długa": { pl: "Triceps (gł. długa)", en: "Triceps (Long Head)" },
-    "Triceps - głowa boczna i przyśrodkowa": { pl: "Triceps (boczny/przyśr.)", en: "Triceps (Lateral/Medial)" },
-    "Góra przedramienia": { pl: "Góra przedramienia", en: "Upper Forearms" },
-    "Dół przedramienia": { pl: "Dół przedramienia", en: "Lower Forearms" },
-    "Góra brzucha": { pl: "Góra brzucha", en: "Upper Abs" },
-    "Dół brzucha": { pl: "Dół brzucha", en: "Lower Abs" },
-    "Boki brzucha": { pl: "Boki brzucha", en: "Obliques" },
-    "Głęboka stabilizacja": { pl: "Głęboka stabilizacja", en: "Core Stabilization" },
-    "Biceps - ogólnie": { pl: "Biceps - ogólnie", en: "Biceps (General)" },
-};
-
-type Exercise = {
-  id: number;
-  instance_key?: string;
-  name: string;
-  name_pl: string;
-  muscle_group: string;
-  sub_muscle: string | null;
-  category: string | null;
-  description: string | null;
-  sets: number | null;
-  reps: string | null;
-  rest_time: string | null;
-  images?: string[];
-  gif_url?: string | null;
-  instructions?: string[];
-  instructions_pl?: string[];
-};
-
-type NutritionResponse = {
-  target_calories: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
-};
-
-type WorkoutDayResponse = {
-  day: number;
-  focus: string;
-  exercises: Exercise[];
-  warmup: Exercise[];
-};
-
-type PlanResponse = {
-  days: WorkoutDayResponse[];
-  nutrition: NutritionResponse | null;
-};
-
-type PlanRequestPayload = {
-  weight: number;
-  height: number;
-  days_per_week: number;
-  experience_level: string;
-  goal: string;
-  equipment: string;
-  duration: string;
-  include_warmup: boolean;
-  contraindicated_muscles: string[];
-  workout_type?: string;
-};
-
-type GeneratedExercise = Exercise & {
-  instance_key: string;
-};
-
-type GeneratedWorkoutDay = Omit<WorkoutDayResponse, "exercises" | "warmup"> & {
-  exercises: GeneratedExercise[];
-  warmup: GeneratedExercise[];
-};
-
-type FormSelectField = {
-  n: string;
-  t: string;
-  d: string;
-  opts: { v: string; l: string }[];
-  type?: never;
-  min?: never;
-  max?: never;
-  p?: never;
-};
-
-type FormNumberField = {
-  n: string;
-  t: string;
-  type: "number";
-  min: number;
-  max: number;
-  p: string;
-  d?: never;
-  opts?: never;
-};
-
-type NutritionStat = {
-  l: string;
-  v: number;
-  u: string;
-  g?: boolean;
-};
-
-function ExerciseMedia({ images, gif_url, name }: { images: string[], gif_url?: string | null, name: string }) {
-  const [currentIdx, setCurrentIdx] = useState(0);
-  
-  useEffect(() => {
-    if (gif_url) return;
-    if (!images || images.length <= 1) return;
-    const interval = setInterval(() => {
-      setCurrentIdx((prev) => (prev + 1) % images.length);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [images, gif_url]);
-
-  if (gif_url) {
-    return (
-      <div className="relative w-full h-64 bg-white rounded-3xl overflow-hidden shadow-inner border border-white/10">
-        <img 
-          src={`${STATIC_URL}/${gif_url}`} 
-          alt={name} 
-          className="w-full h-full object-contain p-2"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x400?text=Preview+Not+Available";
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (!images || images.length === 0) return (
-    <div className="w-full h-64 bg-white/5 flex items-center justify-center rounded-3xl border border-dashed border-white/10">
-        <span className="text-gray-500 text-sm italic font-medium">Brak podglądu</span>
-    </div>
-  );
-
-  return (
-    <div className="relative w-full h-64 bg-white rounded-3xl overflow-hidden shadow-inner border border-white/10">
-      <img 
-        src={`${STATIC_URL}/${images[currentIdx]}`} 
-        alt={name} 
-        className="w-full h-full object-contain p-2"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x400?text=Preview+Not+Available";
-        }}
-      />
-      {images.length > 1 && (
-        <div className="absolute bottom-4 right-4 flex gap-1.5">
-          {images.map((_, i) => (
-            <div key={i} className={`w-2 h-2 rounded-full transition-all ${i === currentIdx ? 'bg-orange-500 w-4' : 'bg-white/30'}`} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
+import { useState, type FormEvent } from "react";
+import ExerciseMedia from "../components/ExerciseMedia";
+import { API_URL } from "../lib/config";
+import { MUSCLES, MUSCLE_GROUPS_MAP, SUB_MUSCLE_MAP, TRANSLATIONS, type Lang } from "../lib/workoutCopy";
+import type { Exercise, FormNumberField, FormSelectField, GeneratedWorkoutDay, NutritionStat, PlanRequestPayload, PlanResponse, WorkoutDayResponse } from "../types/workout";
 export default function Home() {
   const [lang, setLang] = useState<Lang>('pl');
   const t = TRANSLATIONS[lang];
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const [selectedEquipment, setSelectedEquipment] = useState("gym");
   const [replacingId, setReplacingId] = useState<number | null>(null);
   const [showMedia, setShowMedia] = useState<Record<string, boolean>>({});
 
@@ -316,6 +27,7 @@ export default function Home() {
   async function handleReplaceExercise(dayIdx: number, exIdx: number, exercise: Exercise, equipment: string) {
     if (replacingId !== null) return;
     setReplacingId(exercise.id);
+    setReplaceError(null);
 
     try {
       const res = await fetch(`${API_URL}/exercises/replace`, {
@@ -350,16 +62,17 @@ export default function Home() {
 
     } catch (err) {
       console.error(err);
-      alert(lang === 'pl' ? "Nie znaleziono alternatywy." : "No alternative found.");
+      setReplaceError(lang === 'pl' ? "Nie znaleziono alternatywy." : "No alternative found.");
     } finally {
       setReplacingId(null);
     }
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setReplaceError(null);
     setPlan(null);
 
     const formData = new FormData(e.currentTarget);
@@ -376,6 +89,8 @@ export default function Home() {
       include_warmup: formData.get("include_warmup") === "on",
       contraindicated_muscles,
     };
+
+    setSelectedEquipment(payload.equipment);
 
     const workoutType = formData.get("workout_type");
     if (typeof workoutType === "string" && workoutType !== "auto") {
@@ -509,6 +224,7 @@ export default function Home() {
                   <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{f.t}</label>
                   {f.opts ? (
                     <select name={f.n} defaultValue={f.d} required
+                      onChange={f.n === "equipment" ? (event) => setSelectedEquipment(event.target.value) : undefined}
                       className="w-full p-5 sm:p-6 bg-white/5 border border-white/5 rounded-[24px] text-white text-lg sm:text-xl font-black focus:bg-white/10 outline-none transition-all appearance-none cursor-pointer">
                       {f.opts.map((o)=><option key={o.v} value={o.v} className="bg-[#131B2B]">{o.l}</option>)}
                     </select>
@@ -561,6 +277,7 @@ export default function Home() {
             </div>
             
             {error && <div className="p-6 bg-red-900/40 border border-red-500/30 text-red-200 rounded-[24px] text-base font-bold text-center">{error}</div>}
+            {replaceError && <div className="p-6 bg-orange-900/30 border border-orange-500/30 text-orange-100 rounded-[24px] text-base font-bold text-center">{replaceError}</div>}
           </form>
         </section>
 
@@ -722,8 +439,7 @@ export default function Home() {
                             <button 
                               onClick={(e) => {
                                   e.stopPropagation();
-                                  const equipment = (new FormData(document.querySelector('form')!)).get('equipment') as string;
-                                  handleReplaceExercise(plan.days.indexOf(day), idx, ex, equipment);
+                                  handleReplaceExercise(plan.days.indexOf(day), idx, ex, selectedEquipment);
                               }}
                               disabled={replacingId === ex.id}
                               className="px-8 sm:px-10 py-4 sm:py-5 bg-[#0e1422] border-2 border-white/10 hover:border-orange-500 rounded-full text-[10px] sm:text-xs font-black text-gray-300 hover:text-white transition-all shadow-2xl flex items-center gap-3 sm:gap-4 active:scale-90 group/btn"

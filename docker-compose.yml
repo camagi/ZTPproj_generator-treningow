@@ -1,4 +1,4 @@
-services:
+﻿services:
   backend:
     build:
       context: .
@@ -6,6 +6,7 @@ services:
     environment:
       PORT: "8000"
       HOST: "0.0.0.0"
+      DATABASE_URL: "sqlite:////tmp/workout_app.db"
       CORS_ORIGINS: "*"
     expose:
       - "8000"
@@ -14,6 +15,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "/api"
+        NEXT_PUBLIC_STATIC_URL: "/exercises-static"
     depends_on:
       - backend
     ports:
