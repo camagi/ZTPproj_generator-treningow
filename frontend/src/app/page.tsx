@@ -406,12 +406,12 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-12">
               <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{t.weight}</label>
-                <input type="number" name="weight" step="0.1" required placeholder="75"
+                <input type="number" name="weight" step="0.1" min="30" max="300" required placeholder="75"
                   className="w-full p-6 sm:p-8 bg-white/5 border border-white/5 rounded-[24px] sm:rounded-[32px] text-white text-2xl sm:text-3xl font-black focus:bg-white/10 focus:border-orange-500/50 outline-none transition-all placeholder:text-gray-800 shadow-2xl" />
               </div>
               <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{t.height}</label>
-                <input type="number" name="height" required placeholder="180"
+                <input type="number" name="height" min="100" max="250" required placeholder="180"
                   className="w-full p-6 sm:p-8 bg-white/5 border border-white/5 rounded-[24px] sm:rounded-[32px] text-white text-2xl sm:text-3xl font-black focus:bg-white/10 focus:border-orange-500/50 outline-none transition-all placeholder:text-gray-800 shadow-2xl" />
               </div>
             </div>
