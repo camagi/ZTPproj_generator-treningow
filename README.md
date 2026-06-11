@@ -9,7 +9,7 @@ Projekt składa się z dwóch usług:
 - `frontend` - Next.js/React eksportowany statycznie i hostowany np. na Cloudflare Pages.
 - `backend` - FastAPI z SQLAlchemy, generatorem planów i serwowaniem statycznych materiałów ćwiczeń.
 
-Dane źródłowe ćwiczeń znajdują się w katalogu `cwiczenia/`. Baza SQLite, cache tłumaczeń i wygenerowane słowniki nie są wersjonowane, bo są artefaktami runtime/build. Seed bazy jest odtwarzalny z plików źródłowych i skryptów backendu.
+Dane źródłowe ćwiczeń znajdują się w katalogu `cwiczenia/`. Baza SQLite nie jest wersjonowana, bo jest artefaktem runtime i jest odtwarzana przez migrację oraz seed. Pliki `backend/translation_cache.json` i `backend/generated_names_pl.json` są świadomie wersjonowanymi danymi seed/demo, ponieważ zapewniają polskie nazwy i instrukcje ćwiczeń w publicznej wersji aplikacji.
 
 ## Konfiguracja środowiskowa
 

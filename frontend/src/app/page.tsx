@@ -12,7 +12,7 @@ export default function Home() {
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replaceError, setReplaceError] = useState<string | null>(null);
-  const [selectedEquipment, setSelectedEquipment] = useState("gym");
+  const [planEquipment, setPlanEquipment] = useState("gym");
   const [replacingId, setReplacingId] = useState<number | null>(null);
   const [showMedia, setShowMedia] = useState<Record<string, boolean>>({});
 
@@ -23,6 +23,35 @@ export default function Home() {
   const toggleMedia = (key: string) => {
     setShowMedia(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  async function getApiErrorMessage(response: Response, fallback: string) {
+    try {
+      const data = await response.json();
+      const detail = data?.detail;
+
+      if (typeof detail === "string") return detail;
+
+      if (Array.isArray(detail)) {
+        const messages = detail
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object" && "msg" in item) return String(item.msg);
+            return null;
+          })
+          .filter(Boolean);
+
+        if (messages.length > 0) return messages.join(" ");
+      }
+    } catch {
+      // Keep the generic fallback when the server does not return JSON.
+    }
+
+    return fallback;
+  }
+
+  function getErrorMessage(err: unknown, fallback: string) {
+    return err instanceof Error && err.message ? err.message : fallback;
+  }
 
   async function handleReplaceExercise(dayIdx: number, exIdx: number, exercise: Exercise, equipment: string) {
     if (replacingId !== null) return;
@@ -41,7 +70,9 @@ export default function Home() {
         }),
       });
 
-      if (!res.ok) throw new Error("Replace failed");
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, lang === 'pl' ? "Nie znaleziono alternatywy." : "No alternative found."));
+      }
 
       const newEx = await res.json();
       
@@ -62,7 +93,7 @@ export default function Home() {
 
     } catch (err) {
       console.error(err);
-      setReplaceError(lang === 'pl' ? "Nie znaleziono alternatywy." : "No alternative found.");
+      setReplaceError(getErrorMessage(err, lang === 'pl' ? "Nie znaleziono alternatywy." : "No alternative found."));
     } finally {
       setReplacingId(null);
     }
@@ -90,8 +121,6 @@ export default function Home() {
       contraindicated_muscles,
     };
 
-    setSelectedEquipment(payload.equipment);
-
     const workoutType = formData.get("workout_type");
     if (typeof workoutType === "string" && workoutType !== "auto") {
         payload.workout_type = workoutType;
@@ -104,7 +133,9 @@ export default function Home() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("API Error");
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, lang === 'pl' ? "Nie udało się wygenerować planu." : "Could not generate the plan."));
+      }
 
       const data = await res.json();
 
@@ -123,6 +154,7 @@ export default function Home() {
       }
 
       setPlan(data);
+      setPlanEquipment(payload.equipment);
       
       setTimeout(() => {
           document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
@@ -130,7 +162,7 @@ export default function Home() {
       
     } catch (err: unknown) {
       console.error(err);
-      setError(lang === 'pl' ? "Błąd połączenia z serwerem." : "Server connection error.");
+      setError(getErrorMessage(err, lang === 'pl' ? "Błąd połączenia z serwerem." : "Server connection error."));
     } finally {
       setLoading(false);
     }
@@ -224,7 +256,6 @@ export default function Home() {
                   <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{f.t}</label>
                   {f.opts ? (
                     <select name={f.n} defaultValue={f.d} required
-                      onChange={f.n === "equipment" ? (event) => setSelectedEquipment(event.target.value) : undefined}
                       className="w-full p-5 sm:p-6 bg-white/5 border border-white/5 rounded-[24px] text-white text-lg sm:text-xl font-black focus:bg-white/10 outline-none transition-all appearance-none cursor-pointer">
                       {f.opts.map((o)=><option key={o.v} value={o.v} className="bg-[#131B2B]">{o.l}</option>)}
                     </select>
@@ -439,7 +470,7 @@ export default function Home() {
                             <button 
                               onClick={(e) => {
                                   e.stopPropagation();
-                                  handleReplaceExercise(plan.days.indexOf(day), idx, ex, selectedEquipment);
+                                  handleReplaceExercise(plan.days.indexOf(day), idx, ex, planEquipment);
                               }}
                               disabled={replacingId === ex.id}
                               className="px-8 sm:px-10 py-4 sm:py-5 bg-[#0e1422] border-2 border-white/10 hover:border-orange-500 rounded-full text-[10px] sm:text-xs font-black text-gray-300 hover:text-white transition-all shadow-2xl flex items-center gap-3 sm:gap-4 active:scale-90 group/btn"
