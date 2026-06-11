@@ -11,8 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/. ./
 COPY cwiczenia /app/cwiczenia
-RUN chmod +x ./start.sh
 
 EXPOSE 8000
 
-CMD ["./start.sh"]
+CMD ["sh", "-c", "python migrate.py && python seed_data.py --skip-if-populated && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

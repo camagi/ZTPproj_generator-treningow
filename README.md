@@ -46,7 +46,7 @@ Po uruchomieniu:
 - frontend: `http://localhost:3000`
 - backend healthcheck: `http://localhost:3000/api/health`
 
-Kontener backendu wykonuje jawnie:
+Kontener backendu wykonuje jawnie przez `CMD` w `backend/Dockerfile`:
 
 1. `python migrate.py` - tworzy/aktualizuje schemat bazy,
 2. `python seed_data.py --skip-if-populated` - wypełnia pustą bazę danymi ćwiczeń,
