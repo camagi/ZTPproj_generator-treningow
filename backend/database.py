@@ -1,7 +1,10 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./workout_app.db"
+# Uzyskanie ścieżki do folderu, w którym znajduje się ten plik
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'workout_app.db')}"
 
 # "check_same_thread": False is needed only for SQLite
 engine = create_engine(
